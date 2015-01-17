@@ -9,7 +9,7 @@
 #define RCVBUFSIZE 128
 #define MAXCOMMLEN 10
 
-void error(char* msg) {
+void error(const char* msg) {
     perror(msg);
     exit(1);
 }
