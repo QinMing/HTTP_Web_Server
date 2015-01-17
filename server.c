@@ -7,10 +7,27 @@
 #include <netinet/in.h>
 
 #define RCVBUFSIZE 128
+#define MAXCOMMLEN 10
 
 void error(char* msg) {
     perror(msg);
     exit(1);
+}
+
+char* getCommand (char* commLine) {
+    char *comm;
+    char temp;
+    int ind = 0;
+    comm = (char*) malloc(MAXCOMMLEN);
+    temp = commLine[ind];
+    while (ind < MAXCOMMLEN && temp != ' ') {
+        comm[ind] = temp;
+        temp = commLine[++ind];
+    }
+    if (ind == MAXCOMMLEN)
+        printf("command length exceed\n");
+    comm[ind] = '\0';
+    return comm;
 }
 
 int main(int argc, char* argv[]) {
@@ -46,12 +63,15 @@ int main(int argc, char* argv[]) {
 
     socklen_t cliaddr_len;
     cliaddr_len = sizeof(cli_addr);    
+    char *comm;
     while (1) {
         if((csock = accept(sock, (struct sockaddr*) &cli_addr, &cliaddr_len)) < 0) 
             error("Accepct error");
         if((rcvMsgSize = recv(csock, rcvBuff, RCVBUFSIZE, 0)) < 0)
             error("Receive error");
         printf("%s", rcvBuff);
+        comm = getCommand(rcvBuff);
+        printf("\n%s\n", comm);
         close(csock);
     }
     return 1;
