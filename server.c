@@ -6,13 +6,38 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
-#define RCVBUFSIZE 128
+#define RCVBUFSIZE 1280
 #define MAXCOMMLEN 10
 #define MAXFNAMELEN 256
 
 void error(const char* msg) {
     perror(msg);
     exit(1);
+}
+
+int getDigitLen(int size) {
+    int ret = 0;
+    while (size) {
+        ret ++;
+        size /= 10;
+    }
+    return ret;
+}
+
+int isHTML(char *fname) {
+    // TODO get last several char of file format
+    if (fname[0] == '\0') // default page
+        return 1;
+    char temp;
+    int ind = 0;
+    temp = fname[0];   
+    while (temp != '.')
+        temp = fname[++ind];
+    // if html
+    if (fname[++ind] == 'h')
+        return 1;
+    else
+        return 0;
 }
 
 void getCommand (char* commLine, char* &comm, char* &fname) {
@@ -29,7 +54,11 @@ void getCommand (char* commLine, char* &comm, char* &fname) {
         printf("command length exceed\n");
     comm[ind] = '\0';
     int fInd = 0;
-    temp = commLine[++ind];
+    ind += 2;      // skip first '/' in order to get correct path
+    if ((temp = commLine[ind]) == ' ') {
+        fname[fInd] = '\0';
+        return;
+    }
     while (temp != ' ') {
         fname[fInd++] = temp;
         temp = commLine[++ind];
@@ -71,11 +100,16 @@ int main(int argc, char* argv[]) {
     socklen_t cliaddr_len;
     cliaddr_len = sizeof(cli_addr);    
     char *comm, *fname;
-    char defaultPage[] = "./index.html";
+    char defaultPage[] = "html/index.html";
     FILE* fd;
     int fsize;
-    char *content;
+    int digLen, hdLen;
+    char strTxtHeader[] = "HTTP/1.0 200 OK\r\nContent-Type: text/html\r\nContent-Length: ";
+    char strImgHeader[] = "HTTP/1.0 200 OK\r\nContent-Type: image/png\r\nContent-Length: ";
+    size_t headerLen;
+    size_t len;
     while (1) {
+        char *content, *header;
         if((csock = accept(sock, (struct sockaddr*) &cli_addr, &cliaddr_len)) < 0) 
             error("Accepct error");
         if (fork() == 0) {
@@ -83,21 +117,45 @@ int main(int argc, char* argv[]) {
                 error("Receive error");
             printf("%s", rcvBuff);
             getCommand(rcvBuff, comm, fname);
-            if (fname[0] == '/') {
+
+            if (fname[0] == '\0') {       // open default page
                 if ((fd = fopen(defaultPage, "r")) < 0) 
                     error("File open error");
-                fseek(fd, 0, SEEK_END);  // set the position of fd in file end(SEEK_END)
-                fsize = ftell(fd);       // return the fd current offset to beginning
-                rewind(fd);              // reset fd to the beginning
-                content = (char*) malloc(fsize+1); // for safety add 1
-                if (fread(content, 1, fsize, fd) != fsize) 
-                    error("Read file error");
-                if (send(csock, content, fsize, 0) != fsize)
-                    error("Send error");
             }
-            else
-                printf("\n%s\n", fname);
-        }
+            else {
+                if (isHTML(fname) && (fd = fopen(fname, "r")) < 0)
+                    error("File open error");
+                if (!isHTML(fname) && (fd = fopen(fname, "rb")) < 0)
+                    error("File open error");
+            }
+
+            fseek(fd, 0, SEEK_END);  // set the position of fd in file end(SEEK_END)
+            fsize = ftell(fd);       // return the fd current offset to beginning
+            rewind(fd);
+            
+            digLen = getDigitLen(fsize);
+            hdLen = sizeof(strTxtHeader) + digLen + 3;   // two header are same length
+            header = (char*) malloc(hdLen);
+            if (isHTML(fname))
+                snprintf(header, hdLen, "%s%d\n\n", strTxtHeader, fsize);
+            else {
+                snprintf(header, hdLen, "%s%d\r\n", strImgHeader, fsize);
+                //printf("%s\n", header);
+             }
+            if (send(csock, header, hdLen, 0) != hdLen) 
+                error("Send length error");
+            
+            content = (char*) malloc(fsize); // for safety add 1
+            if (fread(content, 1, fsize, fd) != fsize) 
+                error("Read file error");
+            //if (send(csock, content, fsize, 0) != fsize)
+            if (( len = write(csock, content, fsize)) != fsize)
+                error("Send error");
+            printf("write len:%d\n file size:%d\n", len, fsize);
+            free(header);
+            free(content);
+            bzero(rcvBuff, RCVBUFSIZE);
+        }        
         close(csock);
     }
     return 1;
