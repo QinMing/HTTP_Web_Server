@@ -43,9 +43,10 @@ int main(int argc, char* argv[]) {
     int rcvMsgSize;
     struct sockaddr_in serv_addr, cli_addr;
     
-    if (argc < 2) {
-        error("ERROR, No Port Provided");
-    }
+	if (argc < 3) {
+		error("ERROR: not enough argument. Expecting port number and root path");
+	}
+	chdir(argv[2]);
 
     if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
         error("Sockfd is not available");
@@ -75,13 +76,15 @@ int main(int argc, char* argv[]) {
     FILE* fd;
     int fsize;
     char *content;
-    while (1) {
+	char keyboardChar[128] = "\0";
+    while (keyboardChar[0]!='q' && keyboardChar[0]!='Q') {
         if((csock = accept(sock, (struct sockaddr*) &cli_addr, &cliaddr_len)) < 0) 
             error("Accepct error");
-        if (fork() == 0) {
+        if (fork() == 0) {//!!!!!!!!!!csock might be changed due to synch problem--Ming
             if((rcvMsgSize = recv(csock, rcvBuff, RCVBUFSIZE, 0)) < 0)
                 error("Receive error");
-            printf("%s", rcvBuff);
+			printf("[Received]================\r\n");
+            printf("%s\r\n", rcvBuff);
             getCommand(rcvBuff, comm, fname);
             if (fname[0] == '/') {//debug
                 if ((fd = fopen(defaultPage, "r")) < 0) 
@@ -93,16 +96,38 @@ int main(int argc, char* argv[]) {
                 if (fread(content, 1, fsize, fd) != fsize) 
                     error("Read file error");
                 
-                //const char contentType[]="Content-Type: text/html";
-                //if (send(csock, contentType, sizeof(contentType), 0) != sizeof(contentType))
-                //    error("Send Error");
+				//printf("[Sending] == == == == ==\r\n");
+
+                const char initLine[]="HTTP/1.0 200 OK\r\n";
+				if (send(csock, initLine, sizeof(initLine), 0) != sizeof(initLine))
+					error("Send Error");
+				//printf("%s", initLine);
+
+                const char contentType[]="Content-Type: text/html\r\n";
+                if (send(csock, contentType, sizeof(contentType), 0) != sizeof(contentType))
+                    error("Send Error");
+				//printf("%s", contentType);
+
+
+				char contentLength[20];
+				sprintf(contentLength, "Content-Length: %d\r\n",fsize);
+				if (send(csock, contentLength, sizeof(contentLength), 0) != sizeof(contentLength))
+				    error("Send Error");
+				//printf("%s", contentLength);
+
                 if (send(csock, content, fsize, 0) != fsize)
                     error("Send error");
-            } else {
-                printf("\n%s\n", fname);
+				//printf("%s", content);
+
+			} else {
+                printf("\r\n%s\r\n", fname);
             }
+			//close(csock);
+			exit(0);
         }
-        close(csock);
+		close(csock);
+		//scanf("%s", keyboardChar);
     }
-    return 1;
+	close(sock);
+	exit(0);
 }

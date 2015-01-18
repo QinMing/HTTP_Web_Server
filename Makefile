@@ -8,10 +8,12 @@ CXXFLAGS= -g -Wall
 #include debugging symbols in executable
 LDFLAGS= -g
 
-httpd: server.o 
-	$(CC) -o httpd server.o
+httpd: server.o
+	@echo Making httpd ...
+	@$(CC) -o httpd server.o
 
 server.o: server.c 
+	@$(CC) -c -o server.o server.c
 
 clean:
-	$(RM) server *.o
+	$(RM) httpd *.o *~
