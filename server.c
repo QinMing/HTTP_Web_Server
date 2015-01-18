@@ -15,26 +15,26 @@ void error(const char* msg) {
     exit(1);
 }
 
-void getCommand (char* commLine, char* &comm, char* &fname) {
+void getCommand (char* commLine, char** comm, char** fname) {
     char temp;
     int ind = 0;
-    comm = (char*) malloc(MAXCOMMLEN);
-    fname = (char*) malloc(MAXFNAMELEN);
+    (*comm) = (char*) malloc(MAXCOMMLEN);
+    (*fname) = (char*) malloc(MAXFNAMELEN);
     temp = commLine[ind];
     while (ind < MAXCOMMLEN && temp != ' ') {
-        comm[ind] = temp;
+        (*comm)[ind] = temp;
         temp = commLine[++ind];
     }
     if (ind == MAXCOMMLEN)
         printf("command length exceed\n");
-    comm[ind] = '\0';
+    (*comm)[ind] = '\0';
     int fInd = 0;
     temp = commLine[++ind];
     while (temp != ' ') {
-        fname[fInd++] = temp;
+        (*fname)[fInd++] = temp;
         temp = commLine[++ind];
     }
-    fname[fInd] = '\0';
+    (*fname)[fInd] = '\0';
 }
 
 int main(int argc, char* argv[]) {
@@ -85,7 +85,7 @@ int main(int argc, char* argv[]) {
                 error("Receive error");
 			printf("[Received]================\r\n");
             printf("%s\r\n", rcvBuff);
-            getCommand(rcvBuff, comm, fname);
+            getCommand(rcvBuff, &comm, &fname);
             if (fname[0] == '/') {//debug
                 if ((fd = fopen(defaultPage, "r")) < 0) 
                     error("File open error");
@@ -99,25 +99,33 @@ int main(int argc, char* argv[]) {
 				//printf("[Sending] == == == == ==\r\n");
 
                 const char initLine[]="HTTP/1.0 200 OK\r\n";
-				if (send(csock, initLine, sizeof(initLine), 0) != sizeof(initLine))
+				if (send(csock, initLine, strlen(initLine), 0) != strlen(initLine))
 					error("Send Error");
 				//printf("%s", initLine);
 
                 const char contentType[]="Content-Type: text/html\r\n";
-                if (send(csock, contentType, sizeof(contentType), 0) != sizeof(contentType))
+                if (send(csock, contentType, strlen(contentType), 0) != strlen(contentType))
                     error("Send Error");
 				//printf("%s", contentType);
 
 
 				char contentLength[20];
 				sprintf(contentLength, "Content-Length: %d\r\n",fsize);
-				if (send(csock, contentLength, sizeof(contentLength), 0) != sizeof(contentLength))
+				if (send(csock, contentLength, strlen(contentLength), 0) != strlen(contentLength))
 				    error("Send Error");
 				//printf("%s", contentLength);
+				
+				//Empty line between header and content
+				if (send(csock, "\r\n", 2, 0) != 2)
+				    error("Send Error");
 
                 if (send(csock, content, fsize, 0) != fsize)
                     error("Send error");
 				//printf("%s", content);
+				
+				//Empty line after content
+				if (send(csock, "\r\n", 2, 0) != 2)
+				    error("Send Error");
 
 			} else {
                 printf("\r\n%s\r\n", fname);
