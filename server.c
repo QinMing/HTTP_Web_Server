@@ -108,6 +108,7 @@ int main(int argc, char* argv[]) {
     char strImgHeader[] = "HTTP/1.0 200 OK\r\nContent-Type: image/png\r\nContent-Length: ";
     size_t headerLen;
     size_t len;
+    int read_size, stat;
     while (1) {
         char *content, *header;
         if((csock = accept(sock, (struct sockaddr*) &cli_addr, &cliaddr_len)) < 0) 
@@ -139,19 +140,37 @@ int main(int argc, char* argv[]) {
             if (isHTML(fname))
                 snprintf(header, hdLen, "%s%d\n\n", strTxtHeader, fsize);
             else {
-                snprintf(header, hdLen, "%s%d\r\n", strImgHeader, fsize);
-                //printf("%s\n", header);
+                snprintf(header, hdLen, "%s%d\n\n", strImgHeader, fsize);
+                printf("---------------%s\n", header);
              }
             if (send(csock, header, hdLen, 0) != hdLen) 
                 error("Send length error");
             
-            content = (char*) malloc(fsize); // for safety add 1
-            if (fread(content, 1, fsize, fd) != fsize) 
+            content = (char*) malloc(fsize+1); 
+            while (!feof(fd)) { 
+                if (!isHTML(fname))
+                    for (int i = 0; i < fsize; i++)
+                        if (content[i] == '0')
+                            printf("it happens\n");
+                read_size = fread(content, 1, fsize-1, fd);
+                printf("------- read_size is %d\n", read_size);
+                
+                stat = 0;
+                do {
+                    stat += write(csock, content, read_size);
+                    printf("-------- send_size is %d\n", stat);
+                } while (stat < read_size);
+                bzero(content, sizeof(content));
+            }
+            /*
+            content = (char*) malloc(fsize);
+            if ( ( len = fread(content, 1, fsize, fd) ) != fsize) 
                 error("Read file error");
-            //if (send(csock, content, fsize, 0) != fsize)
             if (( len = write(csock, content, fsize)) != fsize)
                 error("Send error");
             printf("write len:%d\n file size:%d\n", len, fsize);
+            */
+
             free(header);
             free(content);
             bzero(rcvBuff, RCVBUFSIZE);
