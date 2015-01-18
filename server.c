@@ -8,17 +8,18 @@
 
 #define RCVBUFSIZE 128
 #define MAXCOMMLEN 10
+#define MAXFNAMELEN 256
 
 void error(const char* msg) {
     perror(msg);
     exit(1);
 }
 
-char* getCommand (char* commLine) {
-    char *comm;
+void getCommand (char* commLine, char* &comm, char* &fname) {
     char temp;
     int ind = 0;
     comm = (char*) malloc(MAXCOMMLEN);
+    fname = (char*) malloc(MAXFNAMELEN);
     temp = commLine[ind];
     while (ind < MAXCOMMLEN && temp != ' ') {
         comm[ind] = temp;
@@ -27,7 +28,13 @@ char* getCommand (char* commLine) {
     if (ind == MAXCOMMLEN)
         printf("command length exceed\n");
     comm[ind] = '\0';
-    return comm;
+    int fInd = 0;
+    temp = commLine[++ind];
+    while (temp != ' ') {
+        fname[fInd++] = temp;
+        temp = commLine[++ind];
+    }
+    fname[fInd] = '\0';
 }
 
 int main(int argc, char* argv[]) {
@@ -63,15 +70,32 @@ int main(int argc, char* argv[]) {
 
     socklen_t cliaddr_len;
     cliaddr_len = sizeof(cli_addr);    
-    char *comm;
+    char *comm, *fname;
+    char defaultPage[] = "./index.html";
+    FILE* fd;
+    int fsize;
+    char *content;
     while (1) {
         if((csock = accept(sock, (struct sockaddr*) &cli_addr, &cliaddr_len)) < 0) 
             error("Accepct error");
         if((rcvMsgSize = recv(csock, rcvBuff, RCVBUFSIZE, 0)) < 0)
             error("Receive error");
         printf("%s", rcvBuff);
-        comm = getCommand(rcvBuff);
-        printf("\n%s\n", comm);
+        getCommand(rcvBuff, comm, fname);
+        if (fname[0] == '/') {
+            if ((fd = fopen(defaultPage, "r")) < 0) 
+                error("File open error");
+            fseek(fd, 0, SEEK_END);  // set the position of fd in file end(SEEK_END)
+            fsize = ftell(fd);       // return the fd current offset to beginning
+            rewind(fd);              // reset fd to the beginning
+            content = (char*) malloc(fsize+1); // for safety add 1
+            if (fread(content, 1, fsize, fd) != fsize) 
+                error("Read file error");
+            if (send(csock, content, fsize, 0) != fsize)
+                error("Send error");
+        }
+        else
+            printf("\n%s\n", fname);
         close(csock);
     }
     return 1;
