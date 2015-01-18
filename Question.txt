@@ -1,0 +1,2 @@
+Q1: Why I cannot put the "close(csock)" inside of the if(fork()==0) area
+    The error seems that the browser cannot refresh the page
