@@ -1,5 +1,5 @@
 #A makefile for CSE 124 project 1
-CC= gcc	
+CC= g++
 
 # include debugging symbols in object files,
 # and enable all warnings

@@ -82,13 +82,17 @@ int main(int argc, char* argv[]) {
             error("Receive error");
         printf("%s", rcvBuff);
         getCommand(rcvBuff, comm, fname);
-        if (fname[0] == '/') {
+        if (fname[0] == '/') {//debug!
             if ((fd = fopen(defaultPage, "r")) < 0) 
                 error("File open error");
             fseek(fd, 0, SEEK_END);  // set the position of fd in file end(SEEK_END)
             fsize = ftell(fd);       // return the fd current offset to beginning
             rewind(fd);              // reset fd to the beginning
             content = (char*) malloc(fsize+1); // for safety add 1
+            
+            //const char contentType[]="Content-Type: text/html";
+            //if (send(csock, contentType, sizeof(contentType), 0) != sizeof(contentType))
+            //    error("Send Error");
             if (fread(content, 1, fsize, fd) != fsize) 
                 error("Read file error");
             if (send(csock, content, fsize, 0) != fsize)
