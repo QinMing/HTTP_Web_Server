@@ -68,6 +68,7 @@ int main(int argc, char* argv[]) {
     if (listen(sock, 128) < 0)
         error("Listen error");
 
+<<<<<<< Updated upstream
     socklen_t cliaddr_len;
     cliaddr_len = sizeof(cli_addr);    
     char *comm, *fname;
@@ -75,11 +76,16 @@ int main(int argc, char* argv[]) {
     FILE* fd;
     int fsize;
     char *content;
+=======
+    socklen_t cliaddr_len = sizeof(cli_addr);
+    char *comm;
+>>>>>>> Stashed changes
     while (1) {
         if((csock = accept(sock, (struct sockaddr*) &cli_addr, &cliaddr_len)) < 0) 
             error("Accepct error");
         if((rcvMsgSize = recv(csock, rcvBuff, RCVBUFSIZE, 0)) < 0)
             error("Receive error");
+<<<<<<< Updated upstream
         printf("%s", rcvBuff);
         getCommand(rcvBuff, comm, fname);
         if (fname[0] == '/') {
@@ -96,8 +102,12 @@ int main(int argc, char* argv[]) {
         }
         else
             printf("\n%s\n", fname);
+=======
+        printf("[recv]%s\n", rcvBuff);
+        comm = getCommand(rcvBuff);
+        printf("[comm]%s\n", comm);
+>>>>>>> Stashed changes
         close(csock);
     }
     return 1;
 }
-    
