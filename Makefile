@@ -1,5 +1,6 @@
 #A makefile for CSE 124 project 1
-CC= gcc -pthread
+CC= gcc
+CompileFlag = -pthread
 
 # include debugging symbols in object files,
 # and enable all warnings
@@ -10,11 +11,11 @@ CXXFLAGS= -g -Wall
 LDFLAGS= -g
 
 httpd: server.o
-	@echo Making httpd ...
 	@$(CC) -o httpd server.o
+	@echo Make complete ...
 
 server.o: server.c 
-	@$(CC) -c -o server.o server.c
+	@$(CC) $(CompileFlag) -c -o server.o server.c
 
 clean:
 	$(RM) httpd *.o *~
