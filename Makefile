@@ -1,5 +1,5 @@
-#use g++ for everything
-CC= g++  	
+#A makefile for CSE 124 project 1
+CC= gcc
 
 # include debugging symbols in object files,
 # and enable all warnings
@@ -8,10 +8,12 @@ CXXFLAGS= -g -Wall
 #include debugging symbols in executable
 LDFLAGS= -g
 
-server: server.o 
-	g++ -o server server.o
+httpd: server.o
+	@echo Making httpd ...
+	@$(CC) -o httpd server.o
 
 server.o: server.c 
+	@$(CC) -c -o server.o server.c
 
 clean:
-	$(RM) server *.o
+	$(RM) httpd *.o *~
