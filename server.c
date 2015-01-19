@@ -9,34 +9,21 @@
 #define RCVBUFSIZE 1280
 #define MAXCOMMLEN 10
 #define MAXFNAMELEN 256
-const char defaultPage[] = "html/index.html";
+const char defaultPage[] = "index.html";
 
-typedef enum {html,jpg,png} FileType ;
+typedef enum {
+    html,jpg,jpeg,png,other
+} FileType ;
 
 void error(const char* msg) {
     perror(msg);
     exit(1);
 }
 
-int isHTML(char *fname) {
-    // TODO get last several char of file format
-    if (fname[0] == '\0') // default page
-        return 1;
-    char temp;
-    int ind = 0;
-    temp = fname[0];   
-    while (temp != '.')
-        temp = fname[++ind];
-    // if html
-    if (fname[++ind] == 'h')
-        return 1;
-    else
-        return 0;
-}
-
 void getCommand (char* commLine, char* comm, char* fname) {
     char temp;
     int ind = 0;
+    
     temp = commLine[ind];
     while (ind < MAXCOMMLEN && temp != ' ') {
         comm[ind] = temp;
@@ -45,7 +32,10 @@ void getCommand (char* commLine, char* comm, char* fname) {
     if (ind == MAXCOMMLEN)
         printf("command length exceed\n");
     comm[ind] = '\0';
+    
     int fInd = 0;
+    fname[0]='.';
+    fname[1]='/';
     while (commLine[ind]==' ') {
         ++ind;
     }
@@ -58,17 +48,67 @@ void getCommand (char* commLine, char* comm, char* fname) {
         temp = commLine[++ind];
     }
     fname[fInd] = '\0';
-    printf("debug: %s\n",fname);
+}
+
+
+//Check the file type though its file name,
+//Append default page name to fname if needed.
+//
+FileType checkFileType(char *fname) {
+    
+    char *c = fname;
+    char *tail;
+    
+    while(*c != '\0')
+        ++c;
+    
+    tail = c;
+    
+    do {
+        --c;
+        if (*c == '/'){
+            //no extension in file name
+            //regard it as a path
+            //TODO : ask TA or professor
+            if (c+1==tail)
+                strcpy(tail,defaultPage);
+            else{
+                *tail='/';
+                strcpy(tail+1,defaultPage);
+            }
+            return html;
+        }
+    } while (*c != '.');
+    
+    ++c;
+    if (strcmp(c,"jpg")==0 ||
+        strcmp(c,"JPG")==0){
+        return jpg;
+    }else if (strcmp(c,"jpeg")==0 ||
+              strcmp(c,"JPEG")==0){
+        return jpeg;
+    }else if (strcmp(c,"png")==0 ||
+              strcmp(c,"PNG")==0){
+        return png;
+
+    }else
+        return other;
 }
 
 int sendInitLine(int csock, int code){
-    const char strOK[]="HTTP/1.0 200 OK\r\n";
-    const char* s;
+    const char str200[]="200 OK\r\n";
+    const char str404[]="404 Not Found\r\n";
+    char s[256]="HTTP/1.0 ";
     switch (code) {
+            
         case 200:
-            s=strOK;
+            strcat(s,str200);
             break;
-
+        
+        case 404:
+            strcat(s,str404);
+            break;
+        
         default:
             printf("Error: Unimplemented init line");
             exit(-1);
@@ -83,15 +123,19 @@ int sendInitLine(int csock, int code){
 int sendHeader(int csock, FileType type, int fileSize){
     char s[256]="Content-Type: ";
     switch (type) {
+        
         case html:
             strcat(s,"text/html\r\n");
             break;
+        
         case jpg:
             strcat(s,"image/jpg\r\n");
             break;
+        
         case png:
             strcat(s,"image/png\r\n");
             break;
+        
         default:
             printf("Error: Unimplemented file type");
             exit(-1);
@@ -109,18 +153,38 @@ int sendFile(int csock,char fname[]){
     int fsize;
     FileType type;
 
-    if (fname[0] == '\0') {       // open default page
-        fd = fopen(defaultPage, "r");
-        type = html;
-    } else {
-        if (isHTML(fname)){
-            type = html;
+//    if (fname[0] == '\0') {       // open default page
+//        fd = fopen(defaultPage, "r");
+//        type = html;
+//    } else {
+//        if (isHTML(fname)){
+//            type = html;
+//            fd = fopen(fname, "r" );
+//        }else{
+//            type = png;//debug  TODO
+//            fd = fopen(fname, "rb");
+//        }
+//    }
+    
+    //this will append the default page to fname if needed
+    type=checkFileType(fname);
+    
+    printf("[debug] file name: %s\n",fname);
+    
+    switch (type) {
+        case html:
             fd = fopen(fname, "r" );
-        }else{
-            type = png;//debug  TODO
+            break;
+            
+        case jpg:
+        case png:
             fd = fopen(fname, "rb");
-        }
+            break;
+            
+        default:
+            break;
     }
+    
     if (fd<0) error("File open error");
     
     fseek(fd, 0, SEEK_END);  // set the position of fd in file end(SEEK_END)

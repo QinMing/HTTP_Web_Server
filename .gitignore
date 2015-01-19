@@ -6,4 +6,4 @@ LauncherFolder
 MyDocuments
 httpd.exe
 
-*.pbxproj
+*.xcodeproj/

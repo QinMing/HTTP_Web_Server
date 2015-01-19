@@ -3,6 +3,7 @@ CC= gcc
 
 # include debugging symbols in object files,
 # and enable all warnings
+CFLAGS= -g -Wall
 CXXFLAGS= -g -Wall
 
 #include debugging symbols in executable
