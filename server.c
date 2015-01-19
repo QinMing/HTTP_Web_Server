@@ -183,7 +183,7 @@ void* response(void* args) {
     int ret = 1;
     while (ret != 0) {
         ret = select(args_t->csock+1, &rdfds, NULL, NULL, &tv);
-        printf("time %d sec %d usec\n", tv.tv_sec, tv.tv_usec);
+        printf("time %ld sec %ld usec\n", tv.tv_sec, tv.tv_usec);
         //printf("select return value %d\n", ret);
         if (ret < 0)
             error("Select error");
