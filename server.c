@@ -6,47 +6,152 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
-#define RCVBUFSIZE 128
+#define RCVBUFSIZE 1280
 #define MAXCOMMLEN 10
 #define MAXFNAMELEN 256
+const char defaultPage[] = "html/index.html";
+
+typedef enum {html,jpg,png} FileType ;
 
 void error(const char* msg) {
     perror(msg);
     exit(1);
 }
 
-void getCommand (char* commLine, char** comm, char** fname) {
+int isHTML(char *fname) {
+    // TODO get last several char of file format
+    if (fname[0] == '\0') // default page
+        return 1;
     char temp;
     int ind = 0;
-    (*comm) = (char*) malloc(MAXCOMMLEN);
-    (*fname) = (char*) malloc(MAXFNAMELEN);
+    temp = fname[0];   
+    while (temp != '.')
+        temp = fname[++ind];
+    // if html
+    if (fname[++ind] == 'h')
+        return 1;
+    else
+        return 0;
+}
+
+void getCommand (char* commLine, char* comm, char* fname) {
+    char temp;
+    int ind = 0;
     temp = commLine[ind];
     while (ind < MAXCOMMLEN && temp != ' ') {
-        (*comm)[ind] = temp;
+        comm[ind] = temp;
         temp = commLine[++ind];
     }
     if (ind == MAXCOMMLEN)
         printf("command length exceed\n");
-    (*comm)[ind] = '\0';
+    comm[ind] = '\0';
     int fInd = 0;
-    temp = commLine[++ind];
+    while (commLine[ind]==' ') {
+        ++ind;
+    }
+    if (commLine[ind]=='/') {
+        ++ind;
+    }
+    temp = commLine[ind];
     while (temp != ' ') {
-        (*fname)[fInd++] = temp;
+        fname[fInd++] = temp;
         temp = commLine[++ind];
     }
-    (*fname)[fInd] = '\0';
+    fname[fInd] = '\0';
+    printf("debug: %s\n",fname);
+}
+
+int sendInitLine(int csock, int code){
+    const char strOK[]="HTTP/1.0 200 OK\r\n";
+    const char* s;
+    switch (code) {
+        case 200:
+            s=strOK;
+            break;
+
+        default:
+            printf("Error: Unimplemented init line");
+            exit(-1);
+            break;
+    }
+    int l=strlen(s);
+    if ( write(csock,s,l) != l)
+        error("Error when sending");
+    return 0;
+}
+
+int sendHeader(int csock, FileType type, int fileSize){
+    char s[256]="Content-Type: ";
+    switch (type) {
+        case html:
+            strcat(s,"text/html\r\n");
+            break;
+        case jpg:
+            strcat(s,"image/jpg\r\n");
+            break;
+        case png:
+            strcat(s,"image/png\r\n");
+            break;
+        default:
+            printf("Error: Unimplemented file type");
+            exit(-1);
+            break;
+    }
+    sprintf(s,"%sContent-Length: %d\r\n\r\n",s,fileSize);
+    int l=strlen(s);
+    if ( write(csock,s,l) != l)
+        error("Error when sending");
+    return 0;
+}
+
+int sendFile(int csock,char fname[]){
+    FILE* fd;
+    int fsize;
+    FileType type;
+
+    if (fname[0] == '\0') {       // open default page
+        fd = fopen(defaultPage, "r");
+        type = html;
+    } else {
+        if (isHTML(fname)){
+            type = html;
+            fd = fopen(fname, "r" );
+        }else{
+            type = png;//debug  TODO
+            fd = fopen(fname, "rb");
+        }
+    }
+    if (fd<0) error("File open error");
+    
+    fseek(fd, 0, SEEK_END);  // set the position of fd in file end(SEEK_END)
+    fsize = ftell(fd);       // return the fd current offset to beginning
+    rewind(fd);
+    
+    sendHeader(csock,type,fsize);
+    
+    char *content = (char*) malloc(fsize);
+    if (( fread(content, 1, fsize, fd)) != fsize)
+        error("Read file error");
+    if (( write(csock, content, fsize)) != fsize)
+        error("Send error");
+    free(content);
+    fclose(fd);
+    return 0;
 }
 
 int main(int argc, char* argv[]) {
     int sock, csock, portno, clilen, n;
     char rcvBuff[RCVBUFSIZE];
+    char comm[MAXCOMMLEN];
+    char fname[MAXFNAMELEN];
+    
     int rcvMsgSize;
     struct sockaddr_in serv_addr, cli_addr;
     
-	if (argc < 3) {
-		error("ERROR: not enough argument. Expecting port number and root path");
-	}
-	chdir(argv[2]);
+    if (argc < 3) {
+        error("ERROR: Not enough argument. Expecting port number and root path");
+    }
+    chdir(argv[2]);
 
     if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
         error("Sockfd is not available");
@@ -70,72 +175,24 @@ int main(int argc, char* argv[]) {
         error("Listen error");
 
     socklen_t cliaddr_len;
-    cliaddr_len = sizeof(cli_addr);    
-    char *comm, *fname;
-    char defaultPage[] = "./index.html";
-    FILE* fd;
-    int fsize;
-    char *content;
-	char keyboardChar[128] = "\0";
-    while (keyboardChar[0]!='q' && keyboardChar[0]!='Q') {
+    cliaddr_len = sizeof(cli_addr);
+    while (1) {
         if((csock = accept(sock, (struct sockaddr*) &cli_addr, &cliaddr_len)) < 0) 
             error("Accepct error");
-        if (fork() == 0) {//!!!!!!!!!!csock might be changed due to synch problem--Ming
+        if (fork() == 0) {
             if((rcvMsgSize = recv(csock, rcvBuff, RCVBUFSIZE, 0)) < 0)
                 error("Receive error");
-			printf("[Received]================\r\n");
-            printf("%s\r\n", rcvBuff);
-            getCommand(rcvBuff, &comm, &fname);
-            if (fname[0] == '/') {//debug
-                if ((fd = fopen(defaultPage, "r")) < 0) 
-                    error("File open error");
-                fseek(fd, 0, SEEK_END);  // set the position of fd in file end(SEEK_END)
-                fsize = ftell(fd);       // return the fd current offset to beginning
-                rewind(fd);              // reset fd to the beginning
-                content = (char*) malloc(fsize+1); // for safety add 1
-                if (fread(content, 1, fsize, fd) != fsize) 
-                    error("Read file error");
-                
-				//printf("[Sending] == == == == ==\r\n");
+            rcvBuff[rcvMsgSize]='\0';
+            printf("[Received]====================\n%s\n", rcvBuff);
 
-                const char initLine[]="HTTP/1.0 200 OK\r\n";
-				if (send(csock, initLine, strlen(initLine), 0) != strlen(initLine))
-					error("Send Error");
-				//printf("%s", initLine);
+            getCommand(rcvBuff, comm, fname);
 
-                const char contentType[]="Content-Type: text/html\r\n";
-                if (send(csock, contentType, strlen(contentType), 0) != strlen(contentType))
-                    error("Send Error");
-				//printf("%s", contentType);
-
-
-				char contentLength[20];
-				sprintf(contentLength, "Content-Length: %d\r\n",fsize);
-				if (send(csock, contentLength, strlen(contentLength), 0) != strlen(contentLength))
-				    error("Send Error");
-				//printf("%s", contentLength);
-				
-				//Empty line between header and content
-				if (send(csock, "\r\n", 2, 0) != 2)
-				    error("Send Error");
-
-                if (send(csock, content, fsize, 0) != fsize)
-                    error("Send error");
-				//printf("%s", content);
-				
-				//Empty line after content
-				if (send(csock, "\r\n", 2, 0) != 2)
-				    error("Send Error");
-
-			} else {
-                printf("\r\n%s\r\n", fname);
-            }
-			//close(csock);
-			exit(0);
-        }
-		close(csock);
-		//scanf("%s", keyboardChar);
+            sendInitLine(csock,200);
+            sendFile(csock, fname);
+            
+            bzero(rcvBuff, RCVBUFSIZE);
+        }        
+        close(csock);
     }
-	close(sock);
-	exit(0);
+    return 1;
 }
