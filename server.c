@@ -5,6 +5,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <pthread.h>
 
 #define RCVBUFSIZE 1280
 #define MAXCOMMLEN 10
@@ -12,6 +13,13 @@
 const char defaultPage[] = "html/index.html";
 
 typedef enum {html,jpg,png} FileType ;
+
+struct RespArg {
+    int csock;
+    char rcvBuff[RCVBUFSIZE];
+    char comm[MAXCOMMLEN];
+    char fname[MAXFNAMELEN];
+};
 
 void error(const char* msg) {
     perror(msg);
@@ -38,12 +46,14 @@ void getCommand (char* commLine, char* comm, char* fname) {
     char temp;
     int ind = 0;
     temp = commLine[ind];
-    while (ind < MAXCOMMLEN && temp != ' ') {
+    while (ind < MAXCOMMLEN && temp != '\0' && temp != ' ') {
         comm[ind] = temp;
         temp = commLine[++ind];
     }
-    if (ind == MAXCOMMLEN)
+    if (ind == MAXCOMMLEN) {
+        
         printf("command length exceed\n");
+    }
     comm[ind] = '\0';
     int fInd = 0;
     while (commLine[ind]==' ') {
@@ -53,7 +63,7 @@ void getCommand (char* commLine, char* comm, char* fname) {
         ++ind;
     }
     temp = commLine[ind];
-    while (temp != ' ') {
+    while (temp != '\0' && temp != ' ') {
         fname[fInd++] = temp;
         temp = commLine[++ind];
     }
@@ -139,13 +149,31 @@ int sendFile(int csock,char fname[]){
     return 0;
 }
 
+void* response( void* args) {
+    int rcvMsgSize;
+    struct RespArg *args_t ;
+    args_t = (struct RespArg*) args;
+    if((rcvMsgSize = recv(args_t->csock, args_t->rcvBuff, RCVBUFSIZE, 0)) < 0)
+        error("Receive error");
+    args_t->rcvBuff[rcvMsgSize]='\0';
+    printf("%d\n", rcvMsgSize);
+    printf("[Received]====================\n%s\n", args_t->rcvBuff);
+    getCommand(args_t->rcvBuff, args_t->comm, args_t->fname);
+    if (strcmp("GET", args_t->comm) == 0) {
+        sendInitLine(args_t->csock,200);
+        sendFile(args_t->csock, args_t->fname);
+    }
+    close(args_t->csock);
+    free(args_t);
+}
+
 int main(int argc, char* argv[]) {
     int sock, csock, portno, clilen, n;
     char rcvBuff[RCVBUFSIZE];
     char comm[MAXCOMMLEN];
     char fname[MAXFNAMELEN];
     
-    int rcvMsgSize;
+    //int rcvMsgSize;
     struct sockaddr_in serv_addr, cli_addr;
     
     if (argc < 3) {
@@ -179,20 +207,12 @@ int main(int argc, char* argv[]) {
     while (1) {
         if((csock = accept(sock, (struct sockaddr*) &cli_addr, &cliaddr_len)) < 0) 
             error("Accepct error");
-        if (fork() == 0) {
-            if((rcvMsgSize = recv(csock, rcvBuff, RCVBUFSIZE, 0)) < 0)
-                error("Receive error");
-            rcvBuff[rcvMsgSize]='\0';
-            printf("[Received]====================\n%s\n", rcvBuff);
-
-            getCommand(rcvBuff, comm, fname);
-
-            sendInitLine(csock,200);
-            sendFile(csock, fname);
-            
-            bzero(rcvBuff, RCVBUFSIZE);
-        }        
-        close(csock);
+        struct RespArg *args;
+        args = malloc(sizeof(struct RespArg));
+        args->csock = csock;
+        pthread_t* thread;    
+        thread = malloc(sizeof(pthread_t));
+        pthread_create(thread, NULL, (void *)&response, (void *)args);
     }
     return 1;
 }
