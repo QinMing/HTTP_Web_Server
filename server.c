@@ -213,7 +213,7 @@ int sendFile(int csock,char fname[]){
     return 0;
 }
 
-void* response( void* args) {
+void response( void* args) {
     int rcvMsgSize;
     struct RespArg *args_t ;
     args_t = (struct RespArg*) args;
