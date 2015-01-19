@@ -11,6 +11,7 @@
 #define MAXCOMMLEN 10
 #define MAXFNAMELEN 256
 const char defaultPage[] = "index.html";
+//The server is set to "HTTP/1.1", in function sendInitLine()
 
 typedef enum {
     html,jpg,jpeg,png,ico,other
@@ -33,7 +34,6 @@ static inline int notEndingCharacter(char c){
 }
 
 void getCommand (char* commLine, char* comm, char* fname) {
-    //inline int notEndingCharacter(char c);
     char temp;
     int ind = 0;
     
@@ -97,36 +97,49 @@ FileType checkFileType(char *fname) {
     } while (*c != '.');
     
     ++c;
-    if (strcmp(c,"html")==0 ||
-        strcmp(c,"HTML")==0){
-        return html;
-    
-    }else if (strcmp(c,"jpg")==0 ||
-              strcmp(c,"JPG")==0){
-        return jpg;
-        
-    }else if (strcmp(c,"jpeg")==0 ||
-              strcmp(c,"JPEG")==0){
-        return jpeg;
-    
-    }else if (strcmp(c,"png")==0 ||
-              strcmp(c,"PNG")==0){
-        return png;
-        
-    }else if (strcmp(c,"ico")==0 ||
-              strcmp(c,"ICO")==0){
-        return ico;
-    
-    }else{
-        printf("[Warning] Undefined file type\n");
-        return other;
-    }
+	if (strcmp(c, "html") == 0 ||
+		strcmp(c, "HTML") == 0)
+		return html;
+
+	else if
+		(strcmp(c, "jpg") == 0 ||
+		strcmp(c, "JPG") == 0)
+		return jpg;
+
+	else if
+		(strcmp(c, "jpeg") == 0 ||
+		strcmp(c, "JPEG") == 0)
+		return jpeg;
+
+	else if
+		(strcmp(c, "png") == 0 ||
+		strcmp(c, "PNG") == 0)
+		return png;
+
+	else if
+		(strcmp(c, "ico") == 0 ||
+		strcmp(c, "ICO") == 0)
+		return ico;
+
+	else {
+		printf("Warning: Undefined file extension\n");
+		return other;
+	}
 }
 
 int sendInitLine(int csock, int code){
+
+	char s[256] = "HTTP/1.1 ";
+	//TODO
+	//Since HTTP/1.0 did not define any 1xx status codes, servers MUST NOT send a 1xx response to an HTTP/1.0 client except under experimental conditions.
+	//http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
+
+
     const char str200[]="200 OK\r\n";
-    const char str404[]="404 Not Found\r\n";
-    char s[256]="HTTP/1.0 ";
+    //const char str404[]="404 Not Found\r\n";
+	const char str404[] = "404 Not Found\r\n"
+		"Content-Type: text/plain\r\n\r\nError 404 (Not Found).\r\n";
+
     switch (code) {
             
         case 200:
@@ -138,7 +151,7 @@ int sendInitLine(int csock, int code){
             break;
         
         default:
-            printf("Error: Unimplemented init line");
+            printf("Error: Unimplemented response code\n");
             exit(-1);
             break;
     }
@@ -146,6 +159,11 @@ int sendInitLine(int csock, int code){
     if ( write(csock,s,l) != l)
         error("Error when sending");
     return 0;
+}
+
+static inline void sendEmptyLine(int csock) {
+	if (write(csock, "\r\n", 2) != 2)
+		error("Error when sending");
 }
 
 int sendHeader(int csock, FileType type, int fileSize){
@@ -156,9 +174,11 @@ int sendHeader(int csock, FileType type, int fileSize){
             strcat(s,"text/html\r\n");
             break;
         
-        case jpg:
-        case jpeg://TODO
-            strcat(s,"image/jpg\r\n");
+		case jpg:
+        case jpeg:
+            strcat(s,"image/jpeg\r\n");
+			//Seems like image/jpg is not a standard type
+			//https://en.wikipedia.org/wiki/Internet_media_type#Type_image
             break;
         
         case png:
@@ -170,12 +190,14 @@ int sendHeader(int csock, FileType type, int fileSize){
             break;
         
         default:
-            printf("Error: Unimplemented file type");
+            printf("Warning: Unimplemented file type\n");
             //exit(-1);
             s[0]='\0';
             break;
     }
     sprintf(s,"%sContent-Length: %d\r\n\r\n",s,fileSize);
+	//empty line is included
+
     int l=strlen(s);
     if ( write(csock,s,l) != l)
         error("Error when sending");
@@ -186,19 +208,6 @@ int sendFile(int csock,char fname[]){
     FILE* fd;
     int fsize;
     FileType type;
-
-//    if (fname[0] == '\0') {       // open default page
-//        fd = fopen(defaultPage, "r");
-//        type = html;
-//    } else {
-//        if (isHTML(fname)){
-//            type = html;
-//            fd = fopen(fname, "r" );
-//        }else{
-//            type = png;//debug  TODO
-//            fd = fopen(fname, "rb");
-//        }
-//    }
     
     //this will append the default page to fname if needed
     type=checkFileType(fname);
@@ -214,13 +223,15 @@ int sendFile(int csock,char fname[]){
             fd = fopen(fname, "rb");
             break;
     }
-    
-    if (fd<0) error("File open error");//TODO
+	//printf("debug, fd = %lld\n", (long long int)fd);
+	if (fd == NULL) return -1;//send 404 later
+
+	sendInitLine(csock, 200);
     
     fseek(fd, 0, SEEK_END);  // set the position of fd in file end(SEEK_END)
     fsize = ftell(fd);       // return the fd current offset to beginning
     rewind(fd);
-    
+
     sendHeader(csock,type,fsize);
     
     char *content = (char*) malloc(fsize);
@@ -244,8 +255,13 @@ void response( void* args) {
     printf("[Received]====================\n%s\n", args_t->rcvBuff);
     getCommand(args_t->rcvBuff, args_t->comm, args_t->fname);
     if (strcmp("GET", args_t->comm) == 0) {
-        sendInitLine(args_t->csock,200);
-        sendFile(args_t->csock, args_t->fname);
+		if (sendFile(args_t->csock, args_t->fname) == -1) {
+			sendInitLine(args_t->csock, 404);
+			sendEmptyLine(args_t->csock);
+			//the status line is terminated by an empty line.
+			//see http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
+			printf("debug, sending 404\n");
+		}
     }
     printf("[Debug]closing csock\n");
     close(args_t->csock);
@@ -253,12 +269,11 @@ void response( void* args) {
 }
 
 int main(int argc, char* argv[]) {
-    int sock, csock, portno, clilen, n;
+    int sock, csock, portno;
     char rcvBuff[RCVBUFSIZE];
     char comm[MAXCOMMLEN];
     char fname[MAXFNAMELEN];
     
-    //int rcvMsgSize;
     struct sockaddr_in serv_addr, cli_addr;
     
     if (argc < 3) {
@@ -287,8 +302,7 @@ int main(int argc, char* argv[]) {
     if (listen(sock, 128) < 0)
         error("Listen error");
 
-    socklen_t cliaddr_len;
-    cliaddr_len = sizeof(cli_addr);
+    socklen_t cliaddr_len = sizeof(cli_addr);
     while (1) {
         if((csock = accept(sock, (struct sockaddr*) &cli_addr, &cliaddr_len)) < 0) 
             error("Accepct error");
@@ -296,7 +310,7 @@ int main(int argc, char* argv[]) {
         args = malloc(sizeof(struct RespArg));
         args->csock = csock;
         pthread_t* thread;    
-        thread = malloc(sizeof(pthread_t));
+        //thread = malloc(sizeof(pthread_t));
         pthread_create(thread, NULL, (void *)&response, (void *)args);
     }
     return 1;

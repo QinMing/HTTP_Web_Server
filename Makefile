@@ -11,7 +11,7 @@ CXXFLAGS= -g -Wall
 LDFLAGS= -g
 
 httpd: server.o
-	@$(CC) -o httpd server.o
+	@$(CC) $(CompileFlag) -o httpd server.o
 	@echo Make complete.
 
 server.o: server.c 
