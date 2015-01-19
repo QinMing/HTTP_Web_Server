@@ -4,6 +4,7 @@
 #include <sys/types.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/select.h>
 #include <netinet/in.h>
 #include <pthread.h>
 
@@ -72,7 +73,7 @@ void getCommand (char* commLine, char* comm, char* fname) {
 }
 
 int sendInitLine(int csock, int code){
-    const char strOK[]="HTTP/1.0 200 OK\r\n";
+    const char strOK[]="HTTP/1.1 200 OK\r\n";
     const char* s;
     switch (code) {
         case 200:
@@ -149,12 +150,14 @@ int sendFile(int csock,char fname[]){
     return 0;
 }
 
-void* response( void* args) {
+void* response(void* args) {
     int rcvMsgSize;
     struct RespArg *args_t ;
     args_t = (struct RespArg*) args;
+    /*
     if((rcvMsgSize = recv(args_t->csock, args_t->rcvBuff, RCVBUFSIZE, 0)) < 0)
         error("Receive error");
+    printf("client socket: %d\n", args_t->csock);
     args_t->rcvBuff[rcvMsgSize]='\0';
     printf("%d\n", rcvMsgSize);
     printf("[Received]====================\n%s\n", args_t->rcvBuff);
@@ -163,7 +166,45 @@ void* response( void* args) {
         sendInitLine(args_t->csock,200);
         sendFile(args_t->csock, args_t->fname);
     }
-    close(args_t->csock);
+    */
+    
+    /*
+    use select() to try persistent connection
+    do not close the socket until timeout of select 
+    */
+
+    // read fd set initial
+    fd_set rdfds;
+    FD_ZERO(&rdfds); 
+    FD_SET(args_t->csock, &rdfds);
+    struct timeval tv;
+    tv.tv_sec = 5;
+    tv.tv_usec = 0;
+    int ret = 1;
+    while (ret != 0) {
+        ret = select(args_t->csock+1, &rdfds, NULL, NULL, &tv);
+        printf("time %d sec %d usec\n", tv.tv_sec, tv.tv_usec);
+        //printf("select return value %d\n", ret);
+        if (ret < 0)
+            error("Select error");
+        else if (ret == 0) {
+            //printf("closed socket %d\n", args_t->csock);
+            close(args_t->csock);
+        }
+        else {
+            if((rcvMsgSize = recv(args_t->csock, args_t->rcvBuff, RCVBUFSIZE, 0)) < 0)
+            error("Receive error");
+            printf("client socket: %d\n", args_t->csock);
+            args_t->rcvBuff[rcvMsgSize]='\0';
+            printf("%d\n", rcvMsgSize);
+            printf("[Received]====================\n%s\n", args_t->rcvBuff);
+            getCommand(args_t->rcvBuff, args_t->comm, args_t->fname);
+            if (strcmp("GET", args_t->comm) == 0) {
+                sendInitLine(args_t->csock,200);
+                sendFile(args_t->csock, args_t->fname);
+            }
+        }
+    }   
     free(args_t);
 }
 
@@ -207,6 +248,7 @@ int main(int argc, char* argv[]) {
     while (1) {
         if((csock = accept(sock, (struct sockaddr*) &cli_addr, &cliaddr_len)) < 0) 
             error("Accepct error");
+        printf("master thread call one time **********\n");
         struct RespArg *args;
         args = malloc(sizeof(struct RespArg));
         args->csock = csock;
