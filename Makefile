@@ -12,7 +12,7 @@ LDFLAGS= -g
 
 httpd: server.o
 	@$(CC) -o httpd server.o
-	@echo Make complete ...
+	@echo Make complete.
 
 server.o: server.c 
 	@$(CC) $(CompileFlag) -c -o server.o server.c

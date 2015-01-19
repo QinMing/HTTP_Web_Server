@@ -13,7 +13,7 @@
 const char defaultPage[] = "index.html";
 
 typedef enum {
-    html,jpg,jpeg,png,other
+    html,jpg,jpeg,png,ico,other
 } FileType ;
 
 struct RespArg {
@@ -28,32 +28,36 @@ void error(const char* msg) {
     exit(1);
 }
 
+static inline int notEndingCharacter(char c){
+    return (c!=' ' && c!='\t' && c!='\0' && c!='\r' && c!='\n');
+}
+
 void getCommand (char* commLine, char* comm, char* fname) {
+    //inline int notEndingCharacter(char c);
     char temp;
     int ind = 0;
     
     temp = commLine[ind];
-    while (ind < MAXCOMMLEN && temp != '\0' && temp != ' ') {
+    while (ind < MAXCOMMLEN && notEndingCharacter(temp)) {
         comm[ind] = temp;
         temp = commLine[++ind];
     }
     if (ind == MAXCOMMLEN) {
-        
-        printf("command length exceed\n");
+        printf("[Client Error] Command length exceeded\n");
     }
     comm[ind] = '\0';
-    
-    int fInd = 0;
+
     fname[0]='.';
     fname[1]='/';
-    while (commLine[ind]==' ') {
+    int fInd = 2;
+    while (commLine[ind]==' ' || commLine[ind]=='\t') {
         ++ind;
     }
     if (commLine[ind]=='/') {
         ++ind;
     }
     temp = commLine[ind];
-    while (temp != '\0' && temp != ' ') {
+    while (notEndingCharacter(temp)) {
         fname[fInd++] = temp;
         temp = commLine[++ind];
     }
@@ -68,7 +72,7 @@ FileType checkFileType(char *fname) {
     
     char *c = fname;
     char *tail;
-    
+
     while(*c != '\0')
         ++c;
     
@@ -80,29 +84,43 @@ FileType checkFileType(char *fname) {
             //no extension in file name
             //regard it as a path
             //TODO : ask TA or professor
-            if (c+1==tail)
+
+            if (c+1==tail){
                 strcpy(tail,defaultPage);
-            else{
+            }else{
                 *tail='/';
                 strcpy(tail+1,defaultPage);
             }
+
             return html;
         }
     } while (*c != '.');
     
     ++c;
-    if (strcmp(c,"jpg")==0 ||
-        strcmp(c,"JPG")==0){
+    if (strcmp(c,"html")==0 ||
+        strcmp(c,"HTML")==0){
+        return html;
+    
+    }else if (strcmp(c,"jpg")==0 ||
+              strcmp(c,"JPG")==0){
         return jpg;
+        
     }else if (strcmp(c,"jpeg")==0 ||
               strcmp(c,"JPEG")==0){
         return jpeg;
+    
     }else if (strcmp(c,"png")==0 ||
               strcmp(c,"PNG")==0){
         return png;
-
-    }else
+        
+    }else if (strcmp(c,"ico")==0 ||
+              strcmp(c,"ICO")==0){
+        return ico;
+    
+    }else{
+        printf("[Warning] Undefined file type\n");
         return other;
+    }
 }
 
 int sendInitLine(int csock, int code){
@@ -139,16 +157,22 @@ int sendHeader(int csock, FileType type, int fileSize){
             break;
         
         case jpg:
+        case jpeg://TODO
             strcat(s,"image/jpg\r\n");
             break;
         
         case png:
             strcat(s,"image/png\r\n");
             break;
+            
+        case ico:
+            strcat(s,"image/x-icon\r\n");
+            break;
         
         default:
             printf("Error: Unimplemented file type");
-            exit(-1);
+            //exit(-1);
+            s[0]='\0';
             break;
     }
     sprintf(s,"%sContent-Length: %d\r\n\r\n",s,fileSize);
@@ -179,23 +203,19 @@ int sendFile(int csock,char fname[]){
     //this will append the default page to fname if needed
     type=checkFileType(fname);
     
-    printf("[debug] file name: %s\n",fname);
+    //printf("[debug] file name: %s[end of debug]",fname);
     
     switch (type) {
         case html:
             fd = fopen(fname, "r" );
             break;
             
-        case jpg:
-        case png:
-            fd = fopen(fname, "rb");
-            break;
-            
         default:
+            fd = fopen(fname, "rb");
             break;
     }
     
-    if (fd<0) error("File open error");
+    if (fd<0) error("File open error");//TODO
     
     fseek(fd, 0, SEEK_END);  // set the position of fd in file end(SEEK_END)
     fsize = ftell(fd);       // return the fd current offset to beginning
@@ -227,6 +247,7 @@ void response( void* args) {
         sendInitLine(args_t->csock,200);
         sendFile(args_t->csock, args_t->fname);
     }
+    printf("[Debug]closing csock\n");
     close(args_t->csock);
     free(args_t);
 }
