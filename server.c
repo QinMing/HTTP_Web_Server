@@ -41,6 +41,8 @@ void* userIOSentry(void* sock) {
     } while (key != 'q' && key != 'Q');
     running = 0;
     close(*((int*)sock));
+    //printf("see if this line in the thread can be reached.............");
+    //A: Yes it can.
     return NULL;
 }
 
@@ -78,7 +80,6 @@ void getCommand(char* commLine, char* comm, char* fname) {
     }
     fname[fInd] = '\0';
 }
-
 
 //Check the file type though its file name,
 //Append default page name to fname if needed.
@@ -353,11 +354,12 @@ int main(int argc, char* argv[]) {
     pthread_t thread;
     pthread_create(&thread, NULL, userIOSentry, (void*)&sock);
 
-    socklen_t cliaddr_len = sizeof(cli_addr);
+    socklen_t cliaddr_len  = sizeof(cli_addr);
     while (running) {
         if (( csock = accept(sock, ( struct sockaddr* ) &cli_addr, &cliaddr_len) ) < 0){
             if (running == 0){
                 printf("Server exits normally.\n");
+                break;
             }else{
                 error("Accepct error");
             }
