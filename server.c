@@ -14,6 +14,8 @@
 const char defaultPage[] = "index.html";
 //The server is set to "HTTP/1.1", in function sendInitLine()
 
+int running = 1;
+
 typedef enum {
     html, jpg, jpeg, png, ico, other
 } FileType;
@@ -28,6 +30,20 @@ struct RespArg {
 void error(const char* msg) {
     perror(msg);
     exit(1);
+}
+
+void* userIOSentry(void* sock) {
+    printf("Waiting for request. To exit server, type in 'q + <Enter>'.\n");
+
+    char key;
+    do {
+        key = getchar();
+    } while (key != 'q' && key != 'Q');
+    close(*((int*)sock));
+    printf("Server exits normally.\n");
+    //exit(0);//may be still not a good way
+    running = 0;
+    return NULL;
 }
 
 static inline int notEndingCharacter(char c) {
@@ -70,6 +86,10 @@ void getCommand(char* commLine, char* comm, char* fname) {
 //Append default page name to fname if needed.
 //
 FileType checkFileType(char *fname) {
+    //TODO : use strtok to parse command. and check http version
+    //TODO
+    //Since HTTP/1.0 did not define any 1xx status codes, servers MUST NOT send a 1xx response to an HTTP/1.0 client except under experimental conditions.
+    //http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
 
     char *c = fname;
     char *tail;
@@ -130,10 +150,6 @@ FileType checkFileType(char *fname) {
 
 int sendInitLine(int csock, int code) {
     char s[256] = "HTTP/1.1 ";
-    //TODO
-    //Since HTTP/1.0 did not define any 1xx status codes, servers MUST NOT send a 1xx response to an HTTP/1.0 client except under experimental conditions.
-    //http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
-
 
     const char str200[] = "200 OK\r\n";
     //const char str404[]="404 Not Found\r\n";
@@ -250,34 +266,38 @@ void response(void* args) {
     args_t = ( struct RespArg* ) args;
 
     // Guarantees that thread resources are deallocated upon return
-    pthread_detach(pthread_self());
+    //pthread_detach(pthread_self());
+    //don't do this because we need to wait for the thread to finish, before the server exits by presing 'q' key.
 
     /*
     use select() to try persistent connection
     do not close the socket until timeout of select
     */
-    // read fd set initial
     fd_set rdfds;
-    FD_ZERO(&rdfds);
-    FD_SET(args_t->csock, &rdfds);
+    //printf("I just want to know sizeof(rdfds):%d\n", sizeof(rdfds));
     struct timeval tv;
-    tv.tv_sec = 5;
-    tv.tv_usec = 0;
     int ret = 1;
     while (ret != 0) {
+        FD_ZERO(&rdfds);
+        FD_SET(args_t->csock, &rdfds);
+        tv.tv_sec = 3;
+        tv.tv_usec = 0;
         ret = select(args_t->csock + 1, &rdfds, NULL, NULL, &tv);
         printf("time %ld sec %ld usec\n", tv.tv_sec, tv.tv_usec);
         //printf("select return value %d\n", ret);
         if (ret < 0)
-            error("Select error");
+            error("Select() error");
         else if (ret>0) {
             if (( rcvMsgSize = recv(args_t->csock, args_t->rcvBuff, RCVBUFSIZE, 0) ) < 0)
                 error("Receive error");
+            //TODO: recv might receive part of the packet, as in the book
+            //Can this be accomplished by checking /r/n ?
             printf("client socket: %d\n", args_t->csock);
             args_t->rcvBuff[rcvMsgSize] = '\0';
-            printf("%d\n", rcvMsgSize);
-            printf("[Received]====================\n%s\n", args_t->rcvBuff);
+            //printf("%d\n", rcvMsgSize);
+            //printf("[Received]====================\n%s\n", args_t->rcvBuff);
             getCommand(args_t->rcvBuff, args_t->comm, args_t->fname);
+            printf("[Received]---------------\n%s %s (...)\n", args_t->comm, args_t->fname);
             if (strcmp("GET", args_t->comm) == 0) {
                 if (sendFile(args_t->csock, args_t->fname) == -1) {
                     sendInitLine(args_t->csock, 404);
@@ -328,18 +348,34 @@ int main(int argc, char* argv[]) {
     if (bind(sock, ( struct sockaddr* ) &serv_addr, sizeof(serv_addr)) < 0)
         error("Bind error");
 
-    if (listen(sock, 128) < 0)
+    //set maximum # of waiting connections to 5
+    if (listen(sock, 5) < 0)
         error("Listen error");
 
+    pthread_t* thread;
+    pthread_create(thread, NULL, userIOSentry, (void*)&sock);
+
+    fd_set ioset;
+    struct timeval tv;
+    tv.tv_sec = 0;
+    tv.tv_usec = 0;
     socklen_t cliaddr_len = sizeof(cli_addr);
-    while (1) {
+    while (running) {
+        //FD_ZERO(&ioset);
+        //FD_SET(0, &ioset);
+        //if (select(1, &ioset, NULL, NULL, &tv) > 0) {
+        //    char inputChar = getchar();
+        //    if (inputChar == 'q' || inputChar == 'Q') {
+        //        printf("'q' is pressed. Exiting server ...\n");
+        //        break;
+        //    }
+        //}
         if (( csock = accept(sock, ( struct sockaddr* ) &cli_addr, &cliaddr_len) ) < 0)
             error("Accepct error");
         printf("master thread call one time **********\n");
         struct RespArg *args;
         args = malloc(sizeof(struct RespArg));
         args->csock = csock;
-        pthread_t* thread;
         //thread = malloc(sizeof(pthread_t));
         pthread_create(thread, NULL, (void *)&response, (void *)args);
     }
