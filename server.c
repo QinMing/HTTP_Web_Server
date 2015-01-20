@@ -248,25 +248,6 @@ void response( void* args) {
     int rcvMsgSize;
     struct RespArg *args_t ;
     args_t = (struct RespArg*) args;
-    /*
-    // previous none persistent connection version
-    if((rcvMsgSize = recv(args_t->csock, args_t->rcvBuff, RCVBUFSIZE, 0)) < 0)
-        error("Receive error");
-    printf("client socket: %d\n", args_t->csock);
-    args_t->rcvBuff[rcvMsgSize]='\0';
-    printf("%d\n", rcvMsgSize);
-    printf("[Received]====================\n%s\n", args_t->rcvBuff);
-    getCommand(args_t->rcvBuff, args_t->comm, args_t->fname);
-    if (strcmp("GET", args_t->comm) == 0) {
-		if (sendFile(args_t->csock, args_t->fname) == -1) {
-			sendInitLine(args_t->csock, 404);
-			sendEmptyLine(args_t->csock);
-			//the status line is terminated by an empty line.
-			//see http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
-			printf("debug, sending 404\n");
-		}
-    }
-    */
     
     /*
     use select() to try persistent connection
@@ -279,32 +260,38 @@ void response( void* args) {
     struct timeval tv;
     tv.tv_sec = 5;
     tv.tv_usec = 0;
-    int ret = 1;
-    while (ret != 0) {
-        ret = select(args_t->csock+1, &rdfds, NULL, NULL, &tv);
-        printf("time %ld sec %ld usec\n", tv.tv_sec, tv.tv_usec);
-        //printf("select return value %d\n", ret);
-        if (ret < 0)
-            error("Select error");
-        else if (ret == 0) {
-            //printf("closed socket %d\n", args_t->csock);
-            close(args_t->csock);
-        }
-        else {
-            if((rcvMsgSize = recv(args_t->csock, args_t->rcvBuff, RCVBUFSIZE, 0)) < 0)
-            error("Receive error");
-            printf("client socket: %d\n", args_t->csock);
-            args_t->rcvBuff[rcvMsgSize]='\0';
-            printf("%d\n", rcvMsgSize);
-            printf("[Received]====================\n%s\n", args_t->rcvBuff);
-            getCommand(args_t->rcvBuff, args_t->comm, args_t->fname);
-            if (strcmp("GET", args_t->comm) == 0) {
-                sendInitLine(args_t->csock,200);
-                sendFile(args_t->csock, args_t->fname);
-            }
-        }
-    }   
-    free(args_t);
+	int ret = 1;
+	while (ret != 0) {
+		ret = select(args_t->csock + 1, &rdfds, NULL, NULL, &tv);
+		printf("time %ld sec %ld usec\n", tv.tv_sec, tv.tv_usec);
+		//printf("select return value %d\n", ret);
+		if (ret < 0)
+			error("Select error");
+		else if (ret>0) {
+			if (( rcvMsgSize = recv(args_t->csock, args_t->rcvBuff, RCVBUFSIZE, 0) ) < 0)
+				error("Receive error");
+			printf("client socket: %d\n", args_t->csock);
+			args_t->rcvBuff[rcvMsgSize] = '\0';
+			printf("%d\n", rcvMsgSize);
+			printf("[Received]====================\n%s\n", args_t->rcvBuff);
+			getCommand(args_t->rcvBuff, args_t->comm, args_t->fname);
+			if (strcmp("GET", args_t->comm) == 0) {
+				if (sendFile(args_t->csock, args_t->fname) == -1) {
+					sendInitLine(args_t->csock, 404);
+					sendEmptyLine(args_t->csock);
+					//the status line is terminated by an empty line.
+					//see http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
+					printf("debug, sending 404\n");
+					ret = 0;
+				}
+			}
+		}
+		if (ret == 0) {
+			//printf("closed socket %d\n", args_t->csock);
+			close(args_t->csock);
+		}
+	}
+	free(args_t);
 }
 
 int main(int argc, char* argv[]) {
@@ -350,7 +337,7 @@ int main(int argc, char* argv[]) {
         args = malloc(sizeof(struct RespArg));
         args->csock = csock;
         pthread_t* thread;    
-        thread = malloc(sizeof(pthread_t));
+        //thread = malloc(sizeof(pthread_t));
         pthread_create(thread, NULL, (void *)&response, (void *)args);
     }
     return 1;
