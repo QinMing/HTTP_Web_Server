@@ -39,10 +39,8 @@ void* userIOSentry(void* sock) {
     do {
         key = getchar();
     } while (key != 'q' && key != 'Q');
-    close(*((int*)sock));
-    printf("Server exits normally.\n");
-    //exit(0);//may be still not a good way
     running = 0;
+    close(*((int*)sock));
     return NULL;
 }
 
@@ -86,7 +84,7 @@ void getCommand(char* commLine, char* comm, char* fname) {
 //Append default page name to fname if needed.
 //
 FileType checkFileType(char *fname) {
-    //TODO : use strtok to parse command. and check http version
+    //TODO : use strtok to check 
     //TODO
     //Since HTTP/1.0 did not define any 1xx status codes, servers MUST NOT send a 1xx response to an HTTP/1.0 client except under experimental conditions.
     //http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
@@ -152,7 +150,6 @@ int sendInitLine(int csock, int code) {
     char s[256] = "HTTP/1.1 ";
 
     const char str200[] = "200 OK\r\n";
-    //const char str404[]="404 Not Found\r\n";
     const char str404[] = "404 Not Found\r\n"
         "Content-Type: text/plain\r\n\r\nError 404 (Not Found).\r\n";
 
@@ -260,14 +257,14 @@ int sendFile(int csock, char fname[]) {
     return 0;
 }
 
-void response(void* args) {
+void* response(void* args) {
     int rcvMsgSize;
     struct RespArg *args_t;
     args_t = ( struct RespArg* ) args;
 
     // Guarantees that thread resources are deallocated upon return
-    //pthread_detach(pthread_self());
-    //don't do this because we need to wait for the thread to finish, before the server exits by presing 'q' key.
+    pthread_detach(pthread_self());
+    //Q: do we need to wait for the thread to finish, before the server exits by presing 'q' key ?
 
     /*
     use select() to try persistent connection
@@ -283,7 +280,7 @@ void response(void* args) {
         tv.tv_sec = 3;
         tv.tv_usec = 0;
         ret = select(args_t->csock + 1, &rdfds, NULL, NULL, &tv);
-        printf("time %ld sec %ld usec\n", tv.tv_sec, tv.tv_usec);
+        printf("time %ld sec %d usec\n", tv.tv_sec, tv.tv_usec);
         //printf("select return value %d\n", ret);
         if (ret < 0)
             error("Select() error");
@@ -315,6 +312,7 @@ void response(void* args) {
         }
     }
     free(args_t);
+    return NULL;
 }
 
 int main(int argc, char* argv[]) {
@@ -352,32 +350,23 @@ int main(int argc, char* argv[]) {
     if (listen(sock, 5) < 0)
         error("Listen error");
 
-    pthread_t* thread;
-    pthread_create(thread, NULL, userIOSentry, (void*)&sock);
+    pthread_t thread;
+    pthread_create(&thread, NULL, userIOSentry, (void*)&sock);
 
-    fd_set ioset;
-    struct timeval tv;
-    tv.tv_sec = 0;
-    tv.tv_usec = 0;
     socklen_t cliaddr_len = sizeof(cli_addr);
     while (running) {
-        //FD_ZERO(&ioset);
-        //FD_SET(0, &ioset);
-        //if (select(1, &ioset, NULL, NULL, &tv) > 0) {
-        //    char inputChar = getchar();
-        //    if (inputChar == 'q' || inputChar == 'Q') {
-        //        printf("'q' is pressed. Exiting server ...\n");
-        //        break;
-        //    }
-        //}
-        if (( csock = accept(sock, ( struct sockaddr* ) &cli_addr, &cliaddr_len) ) < 0)
-            error("Accepct error");
+        if (( csock = accept(sock, ( struct sockaddr* ) &cli_addr, &cliaddr_len) ) < 0){
+            if (running == 0){
+                printf("Server exits normally.\n");
+            }else{
+                error("Accepct error");
+            }
+        }
         printf("master thread call one time **********\n");
         struct RespArg *args;
         args = malloc(sizeof(struct RespArg));
         args->csock = csock;
-        //thread = malloc(sizeof(pthread_t));
-        pthread_create(thread, NULL, (void *)&response, (void *)args);
+        pthread_create(&thread, NULL, response, (void *)args);
     }
-    return 1;
+    return 0;
 }
