@@ -15,6 +15,9 @@
 const char defaultPage[] = "index.html";
 //The server is set to "HTTP/1.1", in function sendInitLine()
 
+//TODO:
+//400 error: HTTP/1.1 without host header. Or no colon, no value, etc.
+
 int running = 1;
 
 typedef enum {
@@ -43,8 +46,6 @@ void* userIOSentry(void* sock) {
     } while (key != 'q' && key != 'Q');
     running = 0;
     close(*((int*)sock));
-    //printf("see if this line in the thread can be reached.............");
-    //A: Yes it can.
     return NULL;
 }
 
@@ -82,6 +83,7 @@ void getCommand(char* commLine, char* comm, char* fname) {
     }
     fname[fInd] = '\0';
 }
+
 
 //Check the file type though its file name,
 //Append default page name to fname if needed.
@@ -382,7 +384,8 @@ void* response(void* args) {
             if (( rcvMsgSize = recv(args_t->csock, args_t->rcvBuff, RCVBUFSIZE, 0) ) < 0)
                 error("Receive error");
             //TODO: recv might receive part of the packet, as in the book
-            //Can this be accomplished by checking /r/n ?
+            //accomplished by checking /r/n/r/n
+            //and the head of a request might be in the last packet!
             printf("client socket: %d\n", args_t->csock);
             args_t->rcvBuff[rcvMsgSize] = '\0';
             //printf("%d\n", rcvMsgSize);
@@ -447,12 +450,11 @@ int main(int argc, char* argv[]) {
     pthread_t thread;
     pthread_create(&thread, NULL, userIOSentry, (void*)&sock);
 
-    socklen_t cliaddr_len  = sizeof(cli_addr);
+    socklen_t cliaddr_len = sizeof(cli_addr);
     while (running) {
         if (( csock = accept(sock, ( struct sockaddr* ) &cli_addr, &cliaddr_len) ) < 0){
             if (running == 0){
                 printf("Server exits normally.\n");
-                break;
             }else{
                 error("Accepct error");
             }
