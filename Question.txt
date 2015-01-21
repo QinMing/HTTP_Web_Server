@@ -1,5 +1,52 @@
-Q1: Why I cannot put the "close(csock)" inside of the if(fork()==0) area
+Q: TCP is not closed if we telnet google, but in this project we just wait for a fix amount of time?
+
+
+==================================
+
+(x)Q1: Why I cannot put the "close(csock)" inside of the if(fork()==0) area
     The error seems that the browser cannot refresh the page
 	Ming : if we don't "close(csock)" out of the area, the client will wait there untill server shuts down.
 
-Q2: What is the test environment of the project, i.e. compiler, OS, etc.
+Q: //no extension in file name regard it as a path 
+These are all the same?:
+	/page1
+	/page1/
+	/page1/index.html
+A: .. is not allowed anywhere in URL
+
+Q: access control, what does “don’t need to consider recursive…”
+	E.x.
+	/secretFolder/htdocs/index.html  only highest
+
+Q: access control, how to deal with domain name? nslookup?
+
+Q: recv might receive part of the packet, as in the book
+            //Can this be accomplished by checking \r\n\r\n ?
+	
+	E.x.
+	[GET /page]  and then [/hello.txt HTTP/1.1\r\n\r\n]  or some header in the middle
+
+Q: how to avoid “bind error, port is in use”
+A: use different port
+	
+
+Q: What is the test environment of the project, i.e. compiler, OS, etc.
+
+
+GET /intl/en/about HTTP/1.1
+Host: www.google.com
+====>I test this kind of request in google, it said permanently removed and return the correct URL. “/intl/en/about/“
+
+GET /gp/goldbox HTTP/1.1
+Host: www.amazon.com
+====>But this is fine. Amazon may parse goldbox as a folder, but google don’t.
+
+GET /gp/goldbox/ HTTP/1.1
+Host: www.amazon.com
+====>fine
+
+GET gp/goldbox/ HTTP/1.1
+Host: www.amazon.com
+====>400 bad request
+
+
