@@ -7,6 +7,7 @@
 #include <sys/select.h>
 #include <netinet/in.h>
 #include <pthread.h>
+#include <arpa/inet.h>
 
 #define RCVBUFSIZE 1280
 #define MAXCOMMLEN 10
@@ -25,6 +26,7 @@ struct RespArg {
     char rcvBuff[RCVBUFSIZE];
     char comm[MAXCOMMLEN];
     char fname[MAXFNAMELEN];
+    struct sockaddr_in cli_addr;
 };
 
 void error(const char* msg) {
@@ -153,6 +155,8 @@ int sendInitLine(int csock, int code) {
     const char str200[] = "200 OK\r\n";
     const char str404[] = "404 Not Found\r\n"
         "Content-Type: text/plain\r\n\r\nError 404 (Not Found).\r\n";
+    const char str403[] = "403 Permission Denied\r\n"
+        "Content-Type: text/plain\r\n\r\nError 403 (Permission Denied).\r\n";
 
     switch (code) {
 
@@ -162,6 +166,10 @@ int sendInitLine(int csock, int code) {
 
     case 404:
         strcat(s, str404);
+        break;
+    
+    case 403:
+        strcat(s, str403);
         break;
 
     default:
@@ -258,11 +266,97 @@ int sendFile(int csock, char fname[]) {
     return 0;
 }
 
+int checkAuth(struct sockaddr_in clientIP, char* filename) {
+    /*  
+    input: open file directory, client ip address
+    output: 0 for deny, 1 for allow
+    check ./htaccess whether the final directory is allowed to access by client
+    //TODO if domain name in the ./htaccess file, should it be lookup dns
+    */
+    FILE *fd;
+    char* line = NULL;
+    size_t len = 0;
+    ssize_t read;
+    char comm[6];
+    char *p = comm;
+    char *pline;
+    unsigned long binIPAddr, slideMask, reqIP;
+    char strIPAddr[4];
+    unsigned int offset, mask, i;
+    char temp;
+    reqIP = ntohl(clientIP.sin_addr.s_addr);
+    if ((fd = fopen(filename, "r")) == NULL)
+        error(".htaccess file open fail\n");
+    while ((read = getline(&line, &len, fd) != -1)) {
+        bzero(comm, sizeof(comm));
+        pline = line;
+        p = comm;
+        while (*pline != ' ')
+            *p++ = *pline++;
+        pline++;
+        while (*pline != ' ')
+            pline++;
+        temp = *(++pline); // judge this is ip or domain name
+        if ( temp >= 65 && temp <= 90 || temp >= 97 && temp <= 122) {
+            //printf("%s", pline);
+            ;
+        }
+        else if (temp >= 48 && temp <= 57) {
+            binIPAddr = 0;
+            offset = 24;
+            while (1) {
+                bzero(strIPAddr, sizeof(strIPAddr));
+                p = strIPAddr;
+                while (*pline != '.' && *pline != '/' && *pline != '\n')
+                    *p++ = *pline++;
+                if (*pline == '\n') {
+                    mask = atoi(strIPAddr);
+                    break;
+                }
+                binIPAddr += ((atoi(strIPAddr)) << offset);
+                offset -= 8;
+                pline++;
+            }
+        } 
+
+        slideMask = 1;
+        slideMask = slideMask << (32 - mask);
+        for (i = 0; i < mask; i++) {
+            if ((reqIP & slideMask) != (binIPAddr & slideMask))
+                break;
+            slideMask = slideMask << 1;
+        }
+        if (i == mask) {
+            if (strcmp(comm, "deny") == 0) {
+                return 0;
+            }
+            else if (strcmp(comm, "allow") == 0) {
+                return 1;
+            }
+        }   
+    }
+
+    return 1;
+}
+
 void* response(void* args) {
     int rcvMsgSize;
     struct RespArg *args_t;
     args_t = ( struct RespArg* ) args;
-
+    
+    unsigned int ip = args_t->cli_addr.sin_addr.s_addr;
+    char ipClient[30];
+    /*sprintf(ipClient, "%d.%d.%d.%d", ((ip >> 0) & 0xFF), ((ip >> 8) & 0xFF), ((ip >> 16) & 0xFF), ((ip >> 24) & 0xFF));
+    printf("Client IP %s\n", ipClient);*/
+    if (checkAuth(args_t->cli_addr,".htaccess") == 0) {
+        sendInitLine(args_t->csock, 403);
+        sendEmptyLine(args_t->csock);
+        printf("debug, sending 403");
+        close(args_t->csock);
+        free(args_t);
+        return NULL;
+    }
+     
     // Guarantees that thread resources are deallocated upon return
     pthread_detach(pthread_self());
     //Q: do we need to wait for the thread to finish, before the server exits by presing 'q' key ?
@@ -281,7 +375,6 @@ void* response(void* args) {
         tv.tv_sec = 3;
         tv.tv_usec = 0;
         ret = select(args_t->csock + 1, &rdfds, NULL, NULL, &tv);
-        printf("time %ld sec %d usec\n", tv.tv_sec, tv.tv_usec);
         //printf("select return value %d\n", ret);
         if (ret < 0)
             error("Select() error");
@@ -368,6 +461,7 @@ int main(int argc, char* argv[]) {
         struct RespArg *args;
         args = malloc(sizeof(struct RespArg));
         args->csock = csock;
+        args->cli_addr = cli_addr;
         pthread_create(&thread, NULL, response, (void *)args);
     }
     return 0;

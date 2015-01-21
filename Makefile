@@ -1,7 +1,6 @@
 #A makefile for CSE 124 project 1
 CC= gcc
-CompileFlagHide = -pthread
-CompileFlag =  
+CompileFlag = -pthread  
 #I found that it still compile without -pthread
 
 # include debugging symbols in object files,
