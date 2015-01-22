@@ -7,16 +7,13 @@
 #include <sys/select.h>
 #include <netinet/in.h>
 #include <pthread.h>
-#include <arpa/inet.h>
+//#include <arpa/inet.h>
 
 #define RCVBUFSIZE 1280
 #define MAXCOMMLEN 10
 #define MAXFNAMELEN 256
 const char defaultPage[] = "index.html";
 //The server is set to "HTTP/1.1", in function sendInitLine()
-
-//TODO:
-//400 error: HTTP/1.1 without host header. Or no colon, no value, etc.
 
 int running = 1;
 
@@ -46,6 +43,8 @@ void* userIOSentry(void* sock) {
     } while (key != 'q' && key != 'Q');
     running = 0;
     close(*((int*)sock));
+    //printf("see if this line in the thread can be reached.............");
+    //A: Yes it can.
     return NULL;
 }
 
@@ -83,7 +82,6 @@ void getCommand(char* commLine, char* comm, char* fname) {
     }
     fname[fInd] = '\0';
 }
-
 
 //Check the file type though its file name,
 //Append default page name to fname if needed.
@@ -273,7 +271,6 @@ int checkAuth(struct sockaddr_in clientIP, char* filename) {
     input: open file directory, client ip address
     output: 0 for deny, 1 for allow
     check ./htaccess whether the final directory is allowed to access by client
-    //TODO if domain name in the ./htaccess file, should it be lookup dns
     */
     FILE *fd;
     char* line = NULL;
@@ -300,6 +297,7 @@ int checkAuth(struct sockaddr_in clientIP, char* filename) {
             pline++;
         temp = *(++pline); // judge this is ip or domain name
         if ( temp >= 65 && temp <= 90 || temp >= 97 && temp <= 122) {
+            //TODO use nslookup to find all the path it get 
             //printf("%s", pline);
             ;
         }
@@ -350,6 +348,8 @@ void* response(void* args) {
     char ipClient[30];
     /*sprintf(ipClient, "%d.%d.%d.%d", ((ip >> 0) & 0xFF), ((ip >> 8) & 0xFF), ((ip >> 16) & 0xFF), ((ip >> 24) & 0xFF));
     printf("Client IP %s\n", ipClient);*/
+    
+    //TODO get directory of htaccess after it has been checked to be correctly
     if (checkAuth(args_t->cli_addr,".htaccess") == 0) {
         sendInitLine(args_t->csock, 403);
         sendEmptyLine(args_t->csock);
@@ -384,8 +384,7 @@ void* response(void* args) {
             if (( rcvMsgSize = recv(args_t->csock, args_t->rcvBuff, RCVBUFSIZE, 0) ) < 0)
                 error("Receive error");
             //TODO: recv might receive part of the packet, as in the book
-            //accomplished by checking /r/n/r/n
-            //and the head of a request might be in the last packet!
+            //Can this be accomplished by checking /r/n ?
             printf("client socket: %d\n", args_t->csock);
             args_t->rcvBuff[rcvMsgSize] = '\0';
             //printf("%d\n", rcvMsgSize);
@@ -450,11 +449,12 @@ int main(int argc, char* argv[]) {
     pthread_t thread;
     pthread_create(&thread, NULL, userIOSentry, (void*)&sock);
 
-    socklen_t cliaddr_len = sizeof(cli_addr);
+    socklen_t cliaddr_len  = sizeof(cli_addr);
     while (running) {
         if (( csock = accept(sock, ( struct sockaddr* ) &cli_addr, &cliaddr_len) ) < 0){
             if (running == 0){
                 printf("Server exits normally.\n");
+                break;
             }else{
                 error("Accepct error");
             }
