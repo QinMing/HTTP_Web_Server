@@ -88,7 +88,7 @@ void getCommand(char* commLine, char* comm, char* fname) {
 //Append default page name to fname if needed.
 //
 FileType checkFileType(char *fname) {
-    //TODO : use strtok to check 
+    //TODO : use strtok to check /../
     //TODO
     //Since HTTP/1.0 did not define any 1xx status codes, servers MUST NOT send a 1xx response to an HTTP/1.0 client except under experimental conditions.
     //http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
@@ -106,7 +106,6 @@ FileType checkFileType(char *fname) {
         if (*c == '/') {
             //no extension in file name
             //regard it as a path
-            //TODO : ask TA or professor
 
             if (c + 1 == tail) {
                 strcpy(tail, defaultPage);
@@ -454,6 +453,7 @@ int main(int argc, char* argv[]) {
         if (( csock = accept(sock, ( struct sockaddr* ) &cli_addr, &cliaddr_len) ) < 0){
             if (running == 0){
                 printf("Server exits normally.\n");
+                break;
             }else{
                 error("Accepct error");
             }
