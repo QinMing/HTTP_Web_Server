@@ -13,7 +13,6 @@
 #define MAXCOMMLEN 10
 #define MAXFNAMELEN 256
 const char defaultPage[] = "index.html";
-//The server is set to "HTTP/1.1", in function sendInitLine()
 
 //TODO:
 //400 error: HTTP/1.1 without host header. Or no colon, no value, etc.
