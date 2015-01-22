@@ -12,13 +12,13 @@ LDFLAGS= -g -pthread
 ###########################
 
 PROGRAM = httpd
-OFILES = server.o permission.o
+O_FILES = server.o permission.o
+C_FILES = $(O_FILES:%.o=%.c)
 
-##########################
 
-$(PROGRAM): $(OFILES)
+$(PROGRAM): $(O_FILES)
 	@echo $@ #冒号左边
-	@$(CC) $(LDFLAGS) $(OFILES) -o $(PROGRAM)
+	@$(CC) $(LDFLAGS) $(O_FILES) -o $(PROGRAM)
 
 %.o:%.c
 	@ echo $< # dependencies list 的每一个
