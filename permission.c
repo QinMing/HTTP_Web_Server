@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <netdb.h>
-#include <arpa/inet.h> //for inet_ntop()
+#include <arpa/inet.h> //for inet_ntop() 
 
 void PrintSocketAddress(const struct sockaddr *address, FILE *stream) {
     // Test for address and stream
