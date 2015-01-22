@@ -8,6 +8,7 @@
 #include <netinet/in.h>
 #include <pthread.h>
 #include <arpa/inet.h>
+#include "permission.h"
 
 #define RCVBUFSIZE 1280
 #define MAXCOMMLEN 10
@@ -266,87 +267,16 @@ int sendFile(int csock, char fname[]) {
     return 0;
 }
 
-int checkAuth(struct sockaddr_in clientIP, char* filename) {
-    /*  
-    input: open file directory, client ip address
-    output: 0 for deny, 1 for allow
-    check ./htaccess whether the final directory is allowed to access by client
-    //TODO if domain name in the ./htaccess file, should it be lookup dns
-    */
-    FILE *fd;
-    char* line = NULL;
-    size_t len = 0;
-    ssize_t read;
-    char comm[6];
-    char *p = comm;
-    char *pline;
-    unsigned long binIPAddr, slideMask, reqIP;
-    char strIPAddr[4];
-    unsigned int offset, mask, i;
-    char temp;
-    reqIP = ntohl(clientIP.sin_addr.s_addr);
-    if ((fd = fopen(filename, "r")) == NULL)
-        error(".htaccess file open fail\n");
-    while ((read = getline(&line, &len, fd) != -1)) {
-        bzero(comm, sizeof(comm));
-        pline = line;
-        p = comm;
-        while (*pline != ' ')
-            *p++ = *pline++;
-        pline++;
-        while (*pline != ' ')
-            pline++;
-        temp = *(++pline); // judge this is ip or domain name
-        if ( temp >= 65 && temp <= 90 || temp >= 97 && temp <= 122) {
-            //printf("%s", pline);
-            ;
-        }
-        else if (temp >= 48 && temp <= 57) {
-            binIPAddr = 0;
-            offset = 24;
-            while (1) {
-                bzero(strIPAddr, sizeof(strIPAddr));
-                p = strIPAddr;
-                while (*pline != '.' && *pline != '/' && *pline != '\n')
-                    *p++ = *pline++;
-                if (*pline == '\n') {
-                    mask = atoi(strIPAddr);
-                    break;
-                }
-                binIPAddr += ((atoi(strIPAddr)) << offset);
-                offset -= 8;
-                pline++;
-            }
-        } 
 
-        slideMask = 1;
-        slideMask = slideMask << (32 - mask);
-        for (i = 0; i < mask; i++) {
-            if ((reqIP & slideMask) != (binIPAddr & slideMask))
-                break;
-            slideMask = slideMask << 1;
-        }
-        if (i == mask) {
-            if (strcmp(comm, "deny") == 0) {
-                return 0;
-            }
-            else if (strcmp(comm, "allow") == 0) {
-                return 1;
-            }
-        }   
-    }
-
-    return 1;
-}
 
 void* response(void* args) {
     int rcvMsgSize;
     struct RespArg *args_t;
     args_t = ( struct RespArg* ) args;
-    
+    /*
     unsigned int ip = args_t->cli_addr.sin_addr.s_addr;
     char ipClient[30];
-    /*sprintf(ipClient, "%d.%d.%d.%d", ((ip >> 0) & 0xFF), ((ip >> 8) & 0xFF), ((ip >> 16) & 0xFF), ((ip >> 24) & 0xFF));
+    sprintf(ipClient, "%d.%d.%d.%d", ((ip >> 0) & 0xFF), ((ip >> 8) & 0xFF), ((ip >> 16) & 0xFF), ((ip >> 24) & 0xFF));
     printf("Client IP %s\n", ipClient);*/
     if (checkAuth(args_t->cli_addr,".htaccess") == 0) {
         sendInitLine(args_t->csock, 403);
@@ -412,9 +342,6 @@ void* response(void* args) {
 
 int main(int argc, char* argv[]) {
     int sock, csock, portno;
-    char rcvBuff[RCVBUFSIZE];
-    char comm[MAXCOMMLEN];
-    char fname[MAXFNAMELEN];
 
     struct sockaddr_in serv_addr, cli_addr;
 

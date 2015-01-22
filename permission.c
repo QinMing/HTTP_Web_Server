@@ -59,7 +59,80 @@ int SockAddrsEqual(const struct sockaddr *addr1, const struct sockaddr *addr2) {
         return 0;
 }
 
-int main(int argc, char *argv[]) {
+int checkAuth(struct sockaddr_in clientIP, char* filename) {
+    /*
+    input: open file directory, client ip address
+    output: 0 for deny, 1 for allow
+    check ./htaccess whether the final directory is allowed to access by client
+    //TODO if domain name in the ./htaccess file, should it be lookup dns
+    */
+    FILE *fd;
+    char* line = NULL;
+    size_t len = 0;
+    ssize_t read;
+    char comm[6];
+    char *p = comm;
+    char *pline;
+    unsigned long binIPAddr, slideMask, reqIP;
+    char strIPAddr[4];
+    unsigned int offset, mask, i;
+    char temp;
+    reqIP = ntohl(clientIP.sin_addr.s_addr);
+    if (( fd = fopen(filename, "r") ) == NULL) {
+        perror(".htaccess file open fail\n");
+        exit(1);
+    }
+    while (( read = getline(&line, &len, fd) != -1 )) {
+        bzero(comm, sizeof(comm));
+        pline = line;
+        p = comm;
+        while (*pline != ' ')
+            *p++ = *pline++;
+        pline++;
+        while (*pline != ' ')
+            pline++;
+        temp = *( ++pline ); // judge this is ip or domain name
+        if ((temp >= 65 && temp <= 90) || (temp >= 97 && temp <= 122)) {
+            //printf("%s", pline);
+            ;
+        } else if (temp >= 48 && temp <= 57) {
+            binIPAddr = 0;
+            offset = 24;
+            while (1) {
+                bzero(strIPAddr, sizeof(strIPAddr));
+                p = strIPAddr;
+                while (*pline != '.' && *pline != '/' && *pline != '\n')
+                    *p++ = *pline++;
+                if (*pline == '\n') {
+                    mask = atoi(strIPAddr);
+                    break;
+                }
+                binIPAddr += ( ( atoi(strIPAddr) ) << offset );
+                offset -= 8;
+                pline++;
+            }
+        }
+
+        slideMask = 1;
+        slideMask = slideMask << ( 32 - mask );
+        for (i = 0; i < mask; i++) {
+            if (( reqIP & slideMask ) != ( binIPAddr & slideMask ))
+                break;
+            slideMask = slideMask << 1;
+        }
+        if (i == mask) {
+            if (strcmp(comm, "deny") == 0) {
+                return 0;
+            } else if (strcmp(comm, "allow") == 0) {
+                return 1;
+            }
+        }
+    }
+
+    return 1;
+}
+
+int main2(int argc, char *argv[]) {
     
     if (argc != 3) return 0;// Test for correct number of arguments
         //DieWithUserMessage("Parameter(s)", "<Address/Name> <Port/Service>");
