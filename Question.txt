@@ -1,8 +1,15 @@
+<<<<<<< ming
 Q: TCP is not closed if we telnet google, but in this project we just wait for a fix amount of time?
 
 
 ==================================
 
+=======
+﻿Q: TCP is not closed if we telnet google, but in this project we just wait for a fix amount of time?
+
+==================================
+
+>>>>>>> local
 (x)Q1: Why I cannot put the "close(csock)" inside of the if(fork()==0) area
     The error seems that the browser cannot refresh the page
 	Ming : if we don't "close(csock)" out of the area, the client will wait there untill server shuts down.
@@ -48,5 +55,11 @@ Host: www.amazon.com
 GET gp/goldbox/ HTTP/1.1
 Host: www.amazon.com
 ====>400 bad request
+<<<<<<< ming
 
 
+=======
+
+cseweb.ucsd.edu 80
+GET /classes/wi15/cse202-a/
+>>>>>>> local

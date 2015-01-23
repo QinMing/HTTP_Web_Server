@@ -12,23 +12,19 @@
 #define RCVBUFSIZE 1280
 #define MAXCOMMLEN 10
 #define MAXFNAMELEN 256
+<<<<<<< ming
 const char defaultPage[] = "index.html";
 //The server is set to "HTTP/1.1", in function sendInitLine()
+=======
+>>>>>>> local
 
 //TODO:
 //400 error: HTTP/1.1 without host header. Or no colon, no value, etc.
 
 int running = 1;
 
-typedef enum {
-    html, jpg, jpeg, png, ico, other
-} FileType;
-
 struct RespArg {
     int csock;
-    char rcvBuff[RCVBUFSIZE];
-    char comm[MAXCOMMLEN];
-    char fname[MAXFNAMELEN];
     struct sockaddr_in cli_addr;
 };
 
@@ -49,6 +45,7 @@ void* userIOSentry(void* sock) {
     return NULL;
 }
 
+<<<<<<< ming
 static inline int notEndingCharacter(char c) {
     return ( c != ' ' && c != '\t' && c != '\0' && c != '\r' && c != '\n' );
 }
@@ -151,6 +148,8 @@ FileType checkFileType(char *fname) {
     }
 }
 
+=======
+>>>>>>> local
 int sendInitLine(int csock, int code) {
     char s[256] = "HTTP/1.1 ";
 
@@ -234,7 +233,7 @@ int sendFile(int csock, char fname[]) {
     FileType type;
 
     //this will append the default page to fname if needed
-    type = checkFileType(fname);
+    type = getFileType(fname);
 
     //printf("[debug] file name: %s[end of debug]",fname);
 
@@ -342,19 +341,28 @@ int checkAuth(struct sockaddr_in clientIP, char* filename) {
 }
 
 void* response(void* args) {
+    char rcvBuff[RCVBUFSIZE];
+    char comm[MAXCOMMLEN];
+    char fname[MAXFNAMELEN];
+    char httpVersion[8];//e.g. "1.1"
     int rcvMsgSize;
+<<<<<<< ming
     struct RespArg *args_t;
     args_t = ( struct RespArg* ) args;
     
+=======
+    int csock = (( struct RespArg* )args)->csock;
+    /*
+>>>>>>> local
     unsigned int ip = args_t->cli_addr.sin_addr.s_addr;
     char ipClient[30];
     /*sprintf(ipClient, "%d.%d.%d.%d", ((ip >> 0) & 0xFF), ((ip >> 8) & 0xFF), ((ip >> 16) & 0xFF), ((ip >> 24) & 0xFF));
     printf("Client IP %s\n", ipClient);*/
     if (checkAuth(args_t->cli_addr,".htaccess") == 0) {
-        sendInitLine(args_t->csock, 403);
-        sendEmptyLine(args_t->csock);
+        sendInitLine(csock, 403);
+        sendEmptyLine(csock);
         printf("debug, sending 403");
-        close(args_t->csock);
+        close(csock);
         free(args_t);
         return NULL;
     }
@@ -373,29 +381,27 @@ void* response(void* args) {
     int ret = 1;
     while (ret != 0) {
         FD_ZERO(&rdfds);
-        FD_SET(args_t->csock, &rdfds);
+        FD_SET(csock, &rdfds);
         tv.tv_sec = 3;
         tv.tv_usec = 0;
-        ret = select(args_t->csock + 1, &rdfds, NULL, NULL, &tv);
+        ret = select(csock + 1, &rdfds, NULL, NULL, &tv);
         //printf("select return value %d\n", ret);
         if (ret < 0)
             error("Select() error");
         else if (ret>0) {
-            if (( rcvMsgSize = recv(args_t->csock, args_t->rcvBuff, RCVBUFSIZE, 0) ) < 0)
+            if (( rcvMsgSize = recv(csock, rcvBuff, RCVBUFSIZE, 0) ) < 0)
                 error("Receive error");
             //TODO: recv might receive part of the packet, as in the book
             //accomplished by checking /r/n/r/n
             //and the head of a request might be in the last packet!
-            printf("client socket: %d\n", args_t->csock);
-            args_t->rcvBuff[rcvMsgSize] = '\0';
-            //printf("%d\n", rcvMsgSize);
-            //printf("[Received]====================\n%s\n", args_t->rcvBuff);
-            getCommand(args_t->rcvBuff, args_t->comm, args_t->fname);
+            printf("client socket: %d\n", csock);
+            rcvBuff[rcvMsgSize] = '\0';
+            getCommand(rcvBuff, comm, fname, httpVersion);
             printf("[Received]---------------\n%s %s (...)\n", args_t->comm, args_t->fname);
-            if (strcmp("GET", args_t->comm) == 0) {
-                if (sendFile(args_t->csock, args_t->fname) == -1) {
-                    sendInitLine(args_t->csock, 404);
-                    sendEmptyLine(args_t->csock);
+            if (strcmp("GET", comm) == 0) {
+                if (sendFile(csock, fname) == -1) {
+                    sendInitLine(csock, 404);
+                    sendEmptyLine(csock);
                     //the status line is terminated by an empty line.
                     //see http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
                     printf("debug, sending 404\n");
@@ -404,11 +410,11 @@ void* response(void* args) {
             }
         }
         if (ret == 0) {
-            //printf("closed socket %d\n", args_t->csock);
-            close(args_t->csock);
+            //printf("closed socket %d\n", csock);
+            close(csock);
         }
     }
-    free(args_t);
+    free(( struct RespArg* )args);
     return NULL;
 }
 
