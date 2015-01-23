@@ -8,15 +8,11 @@
 #include <netinet/in.h>
 #include <pthread.h>
 #include <arpa/inet.h>
+#include "permission.h"
 
 #define RCVBUFSIZE 1280
 #define MAXCOMMLEN 10
 #define MAXFNAMELEN 256
-<<<<<<< ming
-const char defaultPage[] = "index.html";
-//The server is set to "HTTP/1.1", in function sendInitLine()
-=======
->>>>>>> local
 
 //TODO:
 //400 error: HTTP/1.1 without host header. Or no colon, no value, etc.
@@ -45,111 +41,6 @@ void* userIOSentry(void* sock) {
     return NULL;
 }
 
-<<<<<<< ming
-static inline int notEndingCharacter(char c) {
-    return ( c != ' ' && c != '\t' && c != '\0' && c != '\r' && c != '\n' );
-}
-
-void getCommand(char* commLine, char* comm, char* fname) {
-    char temp;
-    int ind = 0;
-
-    temp = commLine[ind];
-    while (ind < MAXCOMMLEN && notEndingCharacter(temp)) {
-        comm[ind] = temp;
-        temp = commLine[++ind];
-    }
-    if (ind == MAXCOMMLEN) {
-        printf("[Client Error] Command length exceeded\n");
-    }
-    comm[ind] = '\0';
-
-    fname[0] = '.';
-    fname[1] = '/';
-    int fInd = 2;
-    while (commLine[ind] == ' ' || commLine[ind] == '\t') {
-        ++ind;
-    }
-    if (commLine[ind] == '/') {
-        ++ind;
-    }
-    temp = commLine[ind];
-    while (notEndingCharacter(temp)) {
-        fname[fInd++] = temp;
-        temp = commLine[++ind];
-    }
-    fname[fInd] = '\0';
-}
-
-
-//Check the file type though its file name,
-//Append default page name to fname if needed.
-//
-FileType checkFileType(char *fname) {
-    //TODO : use strtok to check 
-    //TODO
-    //Since HTTP/1.0 did not define any 1xx status codes, servers MUST NOT send a 1xx response to an HTTP/1.0 client except under experimental conditions.
-    //http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
-
-    char *c = fname;
-    char *tail;
-
-    while (*c != '\0')
-        ++c;
-
-    tail = c;
-
-    do {
-        --c;
-        if (*c == '/') {
-            //no extension in file name
-            //regard it as a path
-            //TODO : ask TA or professor
-
-            if (c + 1 == tail) {
-                strcpy(tail, defaultPage);
-            } else {
-                *tail = '/';
-                strcpy(tail + 1, defaultPage);
-            }
-
-            return html;
-        }
-    } while (*c != '.');
-
-    ++c;
-    if (strcmp(c, "html") == 0 ||
-        strcmp(c, "HTML") == 0)
-        return html;
-
-    else if
-        (strcmp(c, "jpg") == 0 ||
-        strcmp(c, "JPG") == 0)
-        return jpg;
-
-    else if
-        (strcmp(c, "jpeg") == 0 ||
-        strcmp(c, "JPEG") == 0)
-        return jpeg;
-
-    else if
-        (strcmp(c, "png") == 0 ||
-        strcmp(c, "PNG") == 0)
-        return png;
-
-    else if
-        (strcmp(c, "ico") == 0 ||
-        strcmp(c, "ICO") == 0)
-        return ico;
-
-    else {
-        printf("Warning: Undefined file extension\n");
-        return other;
-    }
-}
-
-=======
->>>>>>> local
 int sendInitLine(int csock, int code) {
     char s[256] = "HTTP/1.1 ";
 
@@ -267,78 +158,7 @@ int sendFile(int csock, char fname[]) {
     return 0;
 }
 
-int checkAuth(struct sockaddr_in clientIP, char* filename) {
-    /*  
-    input: open file directory, client ip address
-    output: 0 for deny, 1 for allow
-    check ./htaccess whether the final directory is allowed to access by client
-    //TODO if domain name in the ./htaccess file, should it be lookup dns
-    */
-    FILE *fd;
-    char* line = NULL;
-    size_t len = 0;
-    ssize_t read;
-    char comm[6];
-    char *p = comm;
-    char *pline;
-    unsigned long binIPAddr, slideMask, reqIP;
-    char strIPAddr[4];
-    unsigned int offset, mask, i;
-    char temp;
-    reqIP = ntohl(clientIP.sin_addr.s_addr);
-    if ((fd = fopen(filename, "r")) == NULL)
-        error(".htaccess file open fail\n");
-    while ((read = getline(&line, &len, fd) != -1)) {
-        bzero(comm, sizeof(comm));
-        pline = line;
-        p = comm;
-        while (*pline != ' ')
-            *p++ = *pline++;
-        pline++;
-        while (*pline != ' ')
-            pline++;
-        temp = *(++pline); // judge this is ip or domain name
-        if ( temp >= 65 && temp <= 90 || temp >= 97 && temp <= 122) {
-            //printf("%s", pline);
-            ;
-        }
-        else if (temp >= 48 && temp <= 57) {
-            binIPAddr = 0;
-            offset = 24;
-            while (1) {
-                bzero(strIPAddr, sizeof(strIPAddr));
-                p = strIPAddr;
-                while (*pline != '.' && *pline != '/' && *pline != '\n')
-                    *p++ = *pline++;
-                if (*pline == '\n') {
-                    mask = atoi(strIPAddr);
-                    break;
-                }
-                binIPAddr += ((atoi(strIPAddr)) << offset);
-                offset -= 8;
-                pline++;
-            }
-        } 
 
-        slideMask = 1;
-        slideMask = slideMask << (32 - mask);
-        for (i = 0; i < mask; i++) {
-            if ((reqIP & slideMask) != (binIPAddr & slideMask))
-                break;
-            slideMask = slideMask << 1;
-        }
-        if (i == mask) {
-            if (strcmp(comm, "deny") == 0) {
-                return 0;
-            }
-            else if (strcmp(comm, "allow") == 0) {
-                return 1;
-            }
-        }   
-    }
-
-    return 1;
-}
 
 void* response(void* args) {
     char rcvBuff[RCVBUFSIZE];
@@ -346,17 +166,11 @@ void* response(void* args) {
     char fname[MAXFNAMELEN];
     char httpVersion[8];//e.g. "1.1"
     int rcvMsgSize;
-<<<<<<< ming
-    struct RespArg *args_t;
-    args_t = ( struct RespArg* ) args;
-    
-=======
     int csock = (( struct RespArg* )args)->csock;
     /*
->>>>>>> local
     unsigned int ip = args_t->cli_addr.sin_addr.s_addr;
     char ipClient[30];
-    /*sprintf(ipClient, "%d.%d.%d.%d", ((ip >> 0) & 0xFF), ((ip >> 8) & 0xFF), ((ip >> 16) & 0xFF), ((ip >> 24) & 0xFF));
+    sprintf(ipClient, "%d.%d.%d.%d", ((ip >> 0) & 0xFF), ((ip >> 8) & 0xFF), ((ip >> 16) & 0xFF), ((ip >> 24) & 0xFF));
     printf("Client IP %s\n", ipClient);*/
     if (checkAuth(args_t->cli_addr,".htaccess") == 0) {
         sendInitLine(csock, 403);
@@ -420,9 +234,6 @@ void* response(void* args) {
 
 int main(int argc, char* argv[]) {
     int sock, csock, portno;
-    char rcvBuff[RCVBUFSIZE];
-    char comm[MAXCOMMLEN];
-    char fname[MAXFNAMELEN];
 
     struct sockaddr_in serv_addr, cli_addr;
 
@@ -461,6 +272,7 @@ int main(int argc, char* argv[]) {
         if (( csock = accept(sock, ( struct sockaddr* ) &cli_addr, &cliaddr_len) ) < 0){
             if (running == 0){
                 printf("Server exits normally.\n");
+                break;
             }else{
                 error("Accepct error");
             }

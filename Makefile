@@ -1,22 +1,31 @@
 #A makefile for CSE 124 project 1
-CC= gcc
-CompileFlag = -pthread  
-#I found that it still compile without -pthread
+CC= gcc -std=gnu99
 
-# include debugging symbols in object files,
-# and enable all warnings
-CFLAGS= -g -Wall
-CXXFLAGS= -g -Wall
+# include debugging symbols in object files, and enable all warnings
+WarningOptions = -Wall -Wimplicit
+CFLAGS = -g -pthread $(WarningOptions)
 
 #include debugging symbols in executable
-LDFLAGS= -g
+LDFLAGS= -g -pthread
 
-httpd: server.o
-	@$(CC) $(CompileFlag) -o httpd server.o
-	@echo Make complete.
 
-server.o: server.c 
-	@$(CC) $(CompileFlag) -c -o server.o server.c
+###########################
+
+PROGRAM = httpd
+O_FILES = server.o permission.o
+C_FILES = $(O_FILES:%.o=%.c)
+
+
+$(PROGRAM): $(O_FILES)
+	@echo $@ #冒号左边
+	@$(CC) $(LDFLAGS) $(O_FILES) -o $(PROGRAM)
+
+%.o:%.c
+	@ echo $< # dependencies list 的每一个
+	@ $(CC) $(CFLAGS) -c $<
+
+##########################
+
 
 clean:
 	$(RM) httpd *.o *~
