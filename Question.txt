@@ -1,4 +1,18 @@
-﻿﻿Q: TCP is not closed if we telnet google, but in this project we just wait for a fix amount of time?
+2015年01月23日 discussion
+HTTP/1.1 400 XXX
+Connection: close
+
+Q: TCP is not closed if we telnet google, but in this project we just wait for a fix amount of time?
+A: 关于time out，google和 amazon不time out是因为他们有很多资源。对于这个project，要time out！
+
+nc 是line buffered的，可以在一个terminal打命令到一半，再开一个terminal，测试concurrency
+
+curl 也是很好的命令，可以试试。
+
+To test access control, open etc/hosts, add a domain name
+Solution 2, log in ieng6, type “hostname”, that one is global registered. You can explicitly ssh ieng6-202.ucsd.edu for example.
+
+
 
 (x)Q1: Why I cannot put the "close(csock)" inside of the if(fork()==0) area
     The error seems that the browser cannot refresh the page
