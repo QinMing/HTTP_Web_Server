@@ -10,7 +10,6 @@
 //    return ( c != ' ' && c != '\t' && c != '\0' && c != '\r' && c != '\n' );
 //}
 
-
 //return -1 if there's 400 bad request
 //version is like "1.1"
 int getCommand(char* commLine, char* comm, char* fname, HttpVersion *version) {
@@ -43,24 +42,35 @@ int getCommand(char* commLine, char* comm, char* fname, HttpVersion *version) {
             p += 5;
             if (strlen(p) >= MAXVERSIONLEN)
                 return -1;
-            strcpy(verStr, p);
+            strcpy(verStr, p);//E.g. "1.1"
             break;
         }
         p = strtok(NULL, " \t\0\r\n");
     }
+    //TODO: print out commLine and see if it's changed
 
     if (fname[0] == '\0')//no need to check comm[0] == '\0'
         return -1;
 
     if (verStr[0] == '\0') {
+        //if version is not specified, then it's a Simple-Request, e.g. HTTP/0.9
+        //{0,0}means not specified
         version->major = 0;
         version->minor = 0;
     } else {
-        p = strtok(verStr, ".");
-        //TODO: THIS is what's been left out
+        for (p = verStr; *p != '.'; ++p) {
+            if (*p<'0' || *p>'9') return -1;
+        }
+        version->major = atoi(verStr);
+        ++p;
+        char *minorStr = p;
+        for (; *p != '\0'; ++p) {
+            if (*p<'0' || *p>'9') return -1;
+        }
+        version->minor = atoi(minorStr);
     }
+    return 0;
 
-    //if version is not specified, then it's a Simple-Request, e.g. HTTP/0.9
 
 
     //char temp;
