@@ -1,43 +1,91 @@
 #include <string.h>
+#include <stdlib.h> //for strtol (string to long), and/or atoi
+#include "common.h"
 #include "stringProcessing.h"
 
-const char defaultPage[] = "index.html";
+
+//TODO: check Complete packet
+
+//static inline int notEndingCharacter(char c) {
+//    return ( c != ' ' && c != '\t' && c != '\0' && c != '\r' && c != '\n' );
+//}
 
 
+//return -1 if there's 400 bad request
+//version is like "1.1"
+int getCommand(char* commLine, char* comm, char* fname, HttpVersion *version) {
+    
+    char verStr[MAXVERSIONLEN];
+    comm[0] = '\0';
+    fname[0] = '\0';
+    verStr[0] = '\0';
 
-static inline int notEndingCharacter(char c) {
-    return ( c != ' ' && c != '\t' && c != '\0' && c != '\r' && c != '\n' );
-}
-
-void getCommand(char* commLine, char* comm, char* fname, char* version) {
-    char temp;
-    int ind = 0;
-
-    temp = commLine[ind];
-    while (ind < MAXCOMMLEN && notEndingCharacter(temp)) {
-        comm[ind] = temp;
-        temp = commLine[++ind];
+    char *p = strtok(commLine, " \t\0\r\n");
+    for (int i = 0; i < 3; ++i) {
+        if (p == NULL)break;
+        switch (i) {
+        
+        case 0:
+            if (strlen(p) >= MAXCOMMLEN)
+                return -1;
+            strcpy(comm,p);
+            break;
+        
+        case 1:
+            if (strlen(p) >= MAXFNAMELEN)
+                return -1;
+            strcpy(fname, p);
+            break;
+        
+        case 2:
+            if (strncmp(p, "HTTP/",5) != 0)
+                return -1;
+            p += 5;
+            if (strlen(p) >= MAXVERSIONLEN)
+                return -1;
+            strcpy(verStr, p);
+            break;
+        }
+        p = strtok(NULL, " \t\0\r\n");
     }
-    if (ind == MAXCOMMLEN) {
-        printf("[Client Error] Command length exceeded\n");
-    }
-    comm[ind] = '\0';
 
-    fname[0] = '.';
-    fname[1] = '/';
-    int fInd = 2;
-    while (commLine[ind] == ' ' || commLine[ind] == '\t') {
-        ++ind;
+    if (fname[0] == '\0')//no need to check comm[0] == '\0'
+        return -1;
+
+    if (verStr[0] == '\0') {
+        version->major = 0;
+        version->minor = 0;
+    } else {
+        p = strtok(verStr, ".");
+        //TODO: THIS is what's been left out
     }
-    if (commLine[ind] == '/') {
-        ++ind;
-    }
-    temp = commLine[ind];
-    while (notEndingCharacter(temp)) {
-        fname[fInd++] = temp;
-        temp = commLine[++ind];
-    }
-    fname[fInd] = '\0';
+
+    //if version is not specified, then it's a Simple-Request, e.g. HTTP/0.9
+
+
+    //char temp;
+    //int ind = 0;
+
+    //temp = commLine[ind];
+    //while (ind < MAXCOMMLEN && notEndingCharacter(temp)) {
+    //    comm[ind] = temp;
+    //    temp = commLine[++ind];
+    //}
+    //if (ind == MAXCOMMLEN) {
+    //    printf("[Client Error] Command length exceeded\n");
+    //}
+    //comm[ind] = '\0';
+
+    //int fInd = 0;
+    //while (commLine[ind] == ' ' || commLine[ind] == '\t') {
+    //    ++ind;
+    //}
+    //temp = commLine[ind];
+    //while (notEndingCharacter(temp)) {
+    //    fname[fInd++] = temp;
+    //    temp = commLine[++ind];
+    //}
+    //fname[fInd] = '\0';
 }
 
 
@@ -98,14 +146,18 @@ FileType getFileType(char *fname) {
     }
 }
 
+//This function does more than removing dot segments.
+//Input:  URI from client
+//Output: file path related to working directory in local file system.
+//return: -1 bad path
 //in accordance with <<URI Generic Syntax>> http://www.ietf.org/rfc/rfc3986.txt
-//return -1: bad path
-int removeDotSegments(char source[])
-    char *src = source;
-
+//
+int removeDotSegments(char source[]) {
     //most website return 400 error if URI is not started with '/', according to our test with telnet.
-    if (src[0] != '/') return -1;
+    if (source[0] != '/') return -1;
 
+    char *p;
+    char *src = source;
     char *dst = malloc(strlen(src) + 1);
     dst[0] = '\0';
 
@@ -115,7 +167,6 @@ int removeDotSegments(char source[])
         } else if (strcmp(src, "/.") == 0) {
             src[1] = '\0';
         } else if (strncmp(src, "/../", 4) == 0 || strcmp(src, "/..") == 0) {
-            char *p;
 
             if (src[3] == '\0') {
                 //later
@@ -134,7 +185,7 @@ int removeDotSegments(char source[])
                 return -1;
             }
         } else {
-            char *p = strchr(src + 1, '/');
+            p = strchr(src + 1, '/');
             if (p == NULL) 
                 p = strchr(src, '\0');//to the end of src
 
@@ -142,7 +193,8 @@ int removeDotSegments(char source[])
             src = p;
         }
     }
-    strcpy(source,dst);
+    source[0]='.';//forming "./xxx"
+    strcpy(source+1,dst);
     free(dst);
     return 0;
 }

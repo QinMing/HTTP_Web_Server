@@ -8,11 +8,9 @@
 #include <netinet/in.h>
 #include <pthread.h>
 #include <arpa/inet.h>
+#include "common.h"
 #include "permission.h"
-
-#define RCVBUFSIZE 1280
-#define MAXCOMMLEN 10
-#define MAXFNAMELEN 256
+#include "stringProcessing.h"
 
 //TODO:
 //400 error: HTTP/1.1 without host header. Or no colon, no value, etc.
@@ -23,11 +21,6 @@ struct RespArg {
     int csock;
     struct sockaddr_in cli_addr;
 };
-
-void error(const char* msg) {
-    perror(msg);
-    exit(1);
-}
 
 void* userIOSentry(void* sock) {
     printf("Waiting for request. To exit server, type in 'q + <Enter>'.\n");
@@ -65,8 +58,7 @@ int sendInitLine(int csock, int code) {
         break;
 
     default:
-        printf("Error: Unimplemented response code\n");
-        exit(-1);
+        error("Error: Unimplemented response code\n");
         break;
     }
     int l = strlen(s);
@@ -105,7 +97,6 @@ int sendHeader(int csock, FileType type, int fileSize) {
 
     default:
         printf("Warning: Unimplemented file type\n");
-        //exit(-1);
         s[0] = '\0';
         break;
     }
@@ -164,7 +155,7 @@ void* response(void* args) {
     char rcvBuff[RCVBUFSIZE];
     char comm[MAXCOMMLEN];
     char fname[MAXFNAMELEN];
-    char httpVersion[8];//e.g. "1.1"
+    HttpVersion version;
     int rcvMsgSize;
     int csock = (( struct RespArg* )args)->csock;
     /*
@@ -210,7 +201,7 @@ void* response(void* args) {
             //and the head of a request might be in the last packet!
             printf("client socket: %d\n", csock);
             rcvBuff[rcvMsgSize] = '\0';
-            getCommand(rcvBuff, comm, fname, httpVersion);
+            getCommand(rcvBuff, comm, fname, version);
             printf("[Received]---------------\n%s %s (...)\n", args_t->comm, args_t->fname);
             if (strcmp("GET", comm) == 0) {
                 if (sendFile(csock, fname) == -1) {
