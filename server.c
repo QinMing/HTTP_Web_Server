@@ -10,18 +10,11 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include "permission.h"
+#include "common.h"
 
-#define RCVBUFSIZE 1280
-#define MAXCOMMLEN 10
-#define MAXFNAMELEN 256
-#define MAXDOMAINLEN 256
 const char defaultPage[] = "index.html";
 
 int running = 1;
-
-typedef enum {
-    html, jpg, jpeg, png, ico, other
-} FileType;
 
 struct RespArg {
     int csock;
@@ -30,11 +23,6 @@ struct RespArg {
     char fname[MAXFNAMELEN];
     struct sockaddr_in cli_addr;
 };
-
-void error(const char* msg) {
-    perror(msg);
-    exit(1);
-}
 
 void* userIOSentry(void* sock) {
     printf("Waiting for request. To exit server, type in 'q + <Enter>'.\n");
@@ -266,139 +254,6 @@ int sendFile(int csock, char fname[]) {
     fclose(fd);
     return 0;
 }
-
-int cmpNumIP(unsigned long numIPAddr, unsigned long reqIP, unsigned int mask) {
-    // return 1 means two ip are euqal otherwise different
-    unsigned long slideMask; 
-    unsigned int i;
-    i = 0;
-    slideMask = 1;
-    slideMask = slideMask << (32 - mask);
-    for (i = 0; i < mask; i++) {
-        if ((reqIP & slideMask) != (numIPAddr & slideMask))
-            break;
-        slideMask = slideMask << 1;
-    }   
-    if (i == mask) {
-        return 1;
-    } 
-    return 0;
-}
-
-unsigned long sockaddrToNum(struct sockaddr_in* sockIP) {
-    unsigned long ret;
-    //TODO translate sockaddr_in to Numo
-    return ntohl(sockIP->sin_addr.s_addr);
-}
-
-unsigned long ipStrToNum(char strIP[]) {
-    char strIPAddr[4];
-    unsigned long numIPAddr = 0;
-    unsigned int offset = 24;
-    char *p, *pline;
-    pline = strIP;
-    while (1) {
-        bzero(strIPAddr, sizeof(strIPAddr));
-        p = strIPAddr;
-        while (*pline != '.' && *pline != '\0')
-            *p++ = *pline++;
-        numIPAddr += ((atoi(strIPAddr)) << offset);
-        if (*pline == '\0') 
-            return numIPAddr;
-        offset -= 8;
-        pline++;
-    }
-}
-    
-int checkAuth(struct sockaddr_in clientIP, char* filename) {
-    /*  
-    input: open file directory, client ip address
-    output: 0 for deny, 1 for allow
-    check ./htaccess whether the final directory is allowed to access by client
-    */
-    FILE *fd;
-    char* line = NULL;
-    size_t len = 0;
-    ssize_t read;
-    char comm[6];
-    char *p = comm;
-    char *pline;
-    unsigned long numIPAddr, slideMask, reqIP;
-    char strIPAddr[20];
-    unsigned int offset, mask, i;
-    char temp;
-    struct addrinfo addrCriteria;
-    struct addrinfo *addrList, *addr;
-    const char addrString[MAXDOMAINLEN];
-    const char portString[] = "0";
-    int rtnVal;
-    struct in_addr numIPAddr_in;
-    memset(&addrCriteria, 0, sizeof(addrCriteria));
-    addrCriteria.ai_family = AF_INET;
-    addrCriteria.ai_socktype = SOCK_STREAM;
-    addrCriteria.ai_protocol = IPPROTO_TCP;
-
-    reqIP = ntohl(clientIP.sin_addr.s_addr);
-    if ((fd = fopen(filename, "r")) == NULL)
-        error(".htaccess file open fail\n");
-    while ((read = getline(&line, &len, fd) != -1)) {
-        bzero(comm, sizeof(comm));
-        pline = line;
-        p = comm;
-        while (*pline != ' ')
-            *p++ = *pline++;
-        pline++;
-        while (*pline != ' ')
-            pline++;
-        temp = *(++pline); // judge this is ip or domain name
-        if ( temp >= 65 && temp <= 90 || temp >= 97 && temp <= 122) {
-            bzero(addrString, sizeof(addrString));
-            p = addrString;
-            while (*pline != '\n')
-                *p++ = *pline++;
-            printf("domain name : %s\n", addrString);
-            if ((rtnVal = getaddrinfo(addrString, portString, &addrCriteria, &addrList)) != 0)
-                gai_strerror(rtnVal);
-            if (addrList == NULL)
-                printf("addrList is NULL\n");
-            for (addr = addrList; addr != NULL; addr = addr->ai_next) {
-                numIPAddr = sockaddrToNum((struct sockaddr_in *)addr->ai_addr);            
-                if (cmpNumIP(numIPAddr, reqIP, 32) == 1) { 
-                    if (strcmp(comm, "deny") == 0) { 
-                        return 0; 
-                    } 
-                    else if (strcmp(comm, "allow") == 0) {
-                         return 1;
-                    }
-                }           
-            }
-            continue;
-        }
-        else if (temp >= 48 && temp <= 57) {
-            while (1) {
-                bzero(strIPAddr, sizeof(strIPAddr));
-                p = strIPAddr;
-                while (*pline != '/' && *pline != '\n')
-                    *p++ = *pline++;
-                if (*pline == '\n') {
-                    mask = atoi(strIPAddr);
-                    break;
-                }
-                printf("strIPAddr %s\n", strIPAddr);
-                numIPAddr = ipStrToNum(strIPAddr);
-                pline++;
-            }
-        } 
-        if (cmpNumIP(numIPAddr, reqIP, mask) == 1) {
-            if (strcmp(comm, "deny") == 0) {
-                return 0;
-            }
-            else if (strcmp(comm, "allow") == 0) {
-                return 1;
-            }
-        }            
-    }
-
 
 void* response(void* args) {
     int rcvMsgSize;
