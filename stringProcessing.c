@@ -20,7 +20,7 @@ static inline void nextToken(char **ptr){
 //version is like "1.1"
 //Input: first line of request
 //Output: fname is a raw URI
-int getCommand(const char* commLine, Method* method, char* fname, HttpVersion *version) {
+int getCommand(char* commLine, Method* method, char* fname, HttpVersion *version) {
     char *ptr;
     int i;
     

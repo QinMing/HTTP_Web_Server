@@ -10,9 +10,6 @@
 #include "permission.h"
 #include "stringProcessing.h"
 
-//TODO:
-//400 error: HTTP/1.1 without host header. Or no colon, no value, etc.
-
 int running = 1;
 
 struct RespArg {
@@ -29,6 +26,8 @@ void* userIOSentry(void* sock) {
     } while (key != 'q' && key != 'Q');
     running = 0;
     close(*((int*)sock));
+    //printf("see if this line in the thread can be reached.............");
+    //A: Yes it can.
     return NULL;
 }
 
@@ -37,11 +36,11 @@ int sendInitLine(int csock, int code) {
 
     const char str200[] = "200 OK\r\n";
     const char str400[] = "400 Bad Request\r\n"
-    "Content-Type: text/plain\r\n\r\nError 400 (Bad Request).\r\n";
+    "Content-Type: text/plain\r\n\r\nError 400 (Bad Request).\r\n\r\n";
     const char str404[] = "404 Not Found\r\n"
-        "Content-Type: text/plain\r\n\r\nError 404 (Not Found).\r\n";
+        "Content-Type: text/plain\r\n\r\nError 404 (Not Found).\r\n\r\n";
     const char str403[] = "403 Permission Denied\r\n"
-        "Content-Type: text/plain\r\n\r\nError 403 (Permission Denied).\r\n";
+        "Content-Type: text/plain\r\n\r\nError 403 (Permission Denied).\r\n\r\n";
 
     switch (code) {
 
@@ -50,14 +49,17 @@ int sendInitLine(int csock, int code) {
         break;
 
     case 400:
+        printf("debug, sending 400\n");
         strcat(s, str400);
         break;
             
     case 404:
+        printf("debug, sending 404\n");
         strcat(s, str404);
         break;
     
     case 403:
+        printf("debug, sending 403\n");
         strcat(s, str403);
         break;
 
@@ -69,11 +71,6 @@ int sendInitLine(int csock, int code) {
     if (write(csock, s, l) != l)
         error("Error when sending");
     return 0;
-}
-
-static inline void sendEmptyLine(int csock) {
-    if (write(csock, "\r\n", 2) != 2)
-        error("Error when sending");
 }
 
 int sendHeader(int csock, FileType type, int fileSize) {
@@ -153,8 +150,6 @@ int sendFile(int csock, char fname[]) {
     return 0;
 }
 
-
-
 void* response(void* args) {
     int csock = (( struct RespArg* )args)->csock;
     struct sockaddr_in cli_addr = (( struct RespArg* )args)->cli_addr;
@@ -171,10 +166,10 @@ void* response(void* args) {
     char ipClient[30];
     sprintf(ipClient, "%d.%d.%d.%d", ((ip >> 0) & 0xFF), ((ip >> 8) & 0xFF), ((ip >> 16) & 0xFF), ((ip >> 24) & 0xFF));
     printf("Client IP %s\n", ipClient);*/
+    
+    //TODO get directory of htaccess after it has been checked to be correctly
     if (checkAuth(cli_addr,".htaccess") == 0) {
         sendInitLine(csock, 403);
-        sendEmptyLine(csock);
-        printf("debug, sending 403");
         close(csock);
         return NULL;
     }
@@ -206,17 +201,14 @@ void* response(void* args) {
             rcvBuff[rcvMsgSize] = '\0';
             if (getCommand(rcvBuff, &method, fname, &version) == -1){
                 sendInitLine(csock, 400);
-                printf("debug, sending 400\n");
                 ret = 0;
-                printf("[Receive request]path=%s\n", fname);
             }else if (method == GET) {
+                printf("[Receive request]path=%s\n", fname);
                 if (removeDotSegments(fname) == -1){
                     sendInitLine(csock, 400);
-                    printf("debug, sending 400\n");
                     ret = 0;
                 }else if (sendFile(csock, fname) == -1) {
                     sendInitLine(csock, 404);
-                    printf("debug, sending 404\n");
                     ret = 0;
                 }
             }
@@ -270,7 +262,7 @@ int main(int argc, char* argv[]) {
     pthread_t thread;
     pthread_create(&thread, NULL, userIOSentry, (void*)&sock);
 
-    socklen_t cliaddr_len = sizeof(cli_addr);
+    socklen_t cliaddr_len  = sizeof(cli_addr);
     while (running) {
         if (( csock = accept(sock, ( struct sockaddr* ) &cli_addr, &cliaddr_len) ) < 0){
             if (running == 0){

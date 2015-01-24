@@ -7,6 +7,7 @@
 #define MAXCOMMLEN 10
 #define MAXFNAMELEN 256
 #define MAXVERSIONLEN 32
+#define MAXDOMAINLEN 256
 
 typedef struct {
     int major;
