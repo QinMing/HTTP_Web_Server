@@ -1,5 +1,3 @@
-#include <stdio.h>
-#include <stdlib.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <string.h>
@@ -38,6 +36,8 @@ int sendInitLine(int csock, int code) {
     char s[256] = "HTTP/1.1 ";
 
     const char str200[] = "200 OK\r\n";
+    const char str400[] = "400 Bad Request\r\n"
+    "Content-Type: text/plain\r\n\r\nError 400 (Bad Request).\r\n";
     const char str404[] = "404 Not Found\r\n"
         "Content-Type: text/plain\r\n\r\nError 404 (Not Found).\r\n";
     const char str403[] = "403 Permission Denied\r\n"
@@ -49,6 +49,10 @@ int sendInitLine(int csock, int code) {
         strcat(s, str200);
         break;
 
+    case 400:
+        strcat(s, str400);
+        break;
+            
     case 404:
         strcat(s, str404);
         break;
@@ -152,23 +156,26 @@ int sendFile(int csock, char fname[]) {
 
 
 void* response(void* args) {
+    int csock = (( struct RespArg* )args)->csock;
+    struct sockaddr_in cli_addr = (( struct RespArg* )args)->cli_addr;
+    free(( struct RespArg* )args);
+    
     char rcvBuff[RCVBUFSIZE];
-    char comm[MAXCOMMLEN];
     char fname[MAXFNAMELEN];
     HttpVersion version;
+    Method method;
     int rcvMsgSize;
-    int csock = (( struct RespArg* )args)->csock;
+
     /*
     unsigned int ip = args_t->cli_addr.sin_addr.s_addr;
     char ipClient[30];
     sprintf(ipClient, "%d.%d.%d.%d", ((ip >> 0) & 0xFF), ((ip >> 8) & 0xFF), ((ip >> 16) & 0xFF), ((ip >> 24) & 0xFF));
     printf("Client IP %s\n", ipClient);*/
-    if (checkAuth(args_t->cli_addr,".htaccess") == 0) {
+    if (checkAuth(cli_addr,".htaccess") == 0) {
         sendInitLine(csock, 403);
         sendEmptyLine(csock);
         printf("debug, sending 403");
         close(csock);
-        free(args_t);
         return NULL;
     }
      
@@ -185,11 +192,7 @@ void* response(void* args) {
     struct timeval tv;
     int ret = 1;
     while (ret != 0) {
-        FD_ZERO(&rdfds);
-        FD_SET(csock, &rdfds);
-        tv.tv_sec = 3;
-        tv.tv_usec = 0;
-        ret = select(csock + 1, &rdfds, NULL, NULL, &tv);
+        
         //printf("select return value %d\n", ret);
         if (ret < 0)
             error("Select() error");
@@ -201,14 +204,18 @@ void* response(void* args) {
             //and the head of a request might be in the last packet!
             printf("client socket: %d\n", csock);
             rcvBuff[rcvMsgSize] = '\0';
-            getCommand(rcvBuff, comm, fname, version);
-            printf("[Received]---------------\n%s %s (...)\n", args_t->comm, args_t->fname);
-            if (strcmp("GET", comm) == 0) {
-                if (sendFile(csock, fname) == -1) {
+            if (getCommand(rcvBuff, &method, fname, &version) == -1){
+                sendInitLine(csock, 400);
+                printf("debug, sending 400\n");
+                ret = 0;
+                printf("[Receive request]path=%s\n", fname);
+            }else if (method == GET) {
+                if (removeDotSegments(fname) == -1){
+                    sendInitLine(csock, 400);
+                    printf("debug, sending 400\n");
+                    ret = 0;
+                }else if (sendFile(csock, fname) == -1) {
                     sendInitLine(csock, 404);
-                    sendEmptyLine(csock);
-                    //the status line is terminated by an empty line.
-                    //see http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
                     printf("debug, sending 404\n");
                     ret = 0;
                 }
@@ -217,9 +224,14 @@ void* response(void* args) {
         if (ret == 0) {
             //printf("closed socket %d\n", csock);
             close(csock);
+            break;
         }
+        FD_ZERO(&rdfds);
+        FD_SET(csock, &rdfds);
+        tv.tv_sec = 5;
+        tv.tv_usec = 0;
+        ret = select(csock + 1, &rdfds, NULL, NULL, &tv);
     }
-    free(( struct RespArg* )args);
     return NULL;
 }
 

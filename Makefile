@@ -12,7 +12,7 @@ LDFLAGS= -g -pthread
 ###########################
 
 PROGRAM = httpd
-O_FILES = server.o permission.o
+O_FILES = server.o permission.o stringProcessing.o
 C_FILES = $(O_FILES:%.o=%.c)
 
 

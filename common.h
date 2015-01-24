@@ -1,11 +1,12 @@
 #pragma once
 
-#define RCVBUFSIZE 1280
+#include <stdio.h>
+#include <stdlib.h>
+
+#define RCVBUFSIZE 1440
 #define MAXCOMMLEN 10
 #define MAXFNAMELEN 256
-#define MAXVERSIONLEN 10
-
-const char defaultPage[] = "index.html";
+#define MAXVERSIONLEN 32
 
 typedef struct {
     int major;
@@ -15,6 +16,10 @@ typedef struct {
 typedef enum {
     html, jpg, jpeg, png, ico, other
 } FileType;
+
+typedef enum{
+    GET
+} Method;
 
 static inline void error(const char* msg) {
     perror(msg);
