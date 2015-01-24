@@ -9,13 +9,13 @@
 #include <pthread.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include "permission.h"
 
 #define RCVBUFSIZE 1280
 #define MAXCOMMLEN 10
 #define MAXFNAMELEN 256
 #define MAXDOMAINLEN 256
 const char defaultPage[] = "index.html";
-//The server is set to "HTTP/1.1", in function sendInitLine()
 
 int running = 1;
 
@@ -89,7 +89,7 @@ void getCommand(char* commLine, char* comm, char* fname) {
 //Append default page name to fname if needed.
 //
 FileType checkFileType(char *fname) {
-    //TODO : use strtok to check 
+    //TODO : use strtok to check /../
     //TODO
     //Since HTTP/1.0 did not define any 1xx status codes, servers MUST NOT send a 1xx response to an HTTP/1.0 client except under experimental conditions.
     //http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
@@ -107,7 +107,6 @@ FileType checkFileType(char *fname) {
         if (*c == '/') {
             //no extension in file name
             //regard it as a path
-            //TODO : ask TA or professor
 
             if (c + 1 == tail) {
                 strcpy(tail, defaultPage);
@@ -400,17 +399,15 @@ int checkAuth(struct sockaddr_in clientIP, char* filename) {
         }            
     }
 
-    return 1;
-}
 
 void* response(void* args) {
     int rcvMsgSize;
     struct RespArg *args_t;
     args_t = ( struct RespArg* ) args;
-    
+    /*
     unsigned int ip = args_t->cli_addr.sin_addr.s_addr;
     char ipClient[30];
-    /*sprintf(ipClient, "%d.%d.%d.%d", ((ip >> 0) & 0xFF), ((ip >> 8) & 0xFF), ((ip >> 16) & 0xFF), ((ip >> 24) & 0xFF));
+    sprintf(ipClient, "%d.%d.%d.%d", ((ip >> 0) & 0xFF), ((ip >> 8) & 0xFF), ((ip >> 16) & 0xFF), ((ip >> 24) & 0xFF));
     printf("Client IP %s\n", ipClient);*/
     
     //TODO get directory of htaccess after it has been checked to be correctly
@@ -477,9 +474,6 @@ void* response(void* args) {
 
 int main(int argc, char* argv[]) {
     int sock, csock, portno;
-    char rcvBuff[RCVBUFSIZE];
-    char comm[MAXCOMMLEN];
-    char fname[MAXFNAMELEN];
 
     struct sockaddr_in serv_addr, cli_addr;
 
