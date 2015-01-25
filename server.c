@@ -115,6 +115,7 @@ FileType checkFileType(char *fname) {
     else if
         (strcmp(c, "jpg") == 0 ||
         strcmp(c, "JPG") == 0)
+    
         return jpg;
 
     else if

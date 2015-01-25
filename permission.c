@@ -84,7 +84,12 @@ unsigned long sockaddrToNum(struct sockaddr_in* sockIP) {
 }
 
 unsigned long ipStrToNum(char strIP[]) {
-    char strIPAddr[4];
+    unsigned long numIPAddr;
+    struct in_addr netAddr;
+    inet_aton(strIP, &netAddr);
+    numIPAddr = (unsigned long) netAddr.s_addr;
+    return numIPAddr;
+    /*char strIPAddr[4];
     unsigned long numIPAddr = 0;
     unsigned int offset = 24;
     char *p, *pline;
@@ -99,7 +104,7 @@ unsigned long ipStrToNum(char strIP[]) {
             return numIPAddr;
         offset -= 8;
         pline++;
-    }
+    }*/
 }
 
 int checkAuth(struct sockaddr_in clientIP, char* filename) {
@@ -129,7 +134,8 @@ int checkAuth(struct sockaddr_in clientIP, char* filename) {
     addrCriteria.ai_socktype = SOCK_STREAM;
     addrCriteria.ai_protocol = IPPROTO_TCP;
 
-    reqIP = ntohl(clientIP.sin_addr.s_addr);
+    //reqIP = ntohl(clientIP.sin_addr.s_addr);
+    reqIP = clientIP.sin_addr.s_addr;
     if ((fd = fopen(filename, "r")) == NULL)
         error(".htaccess file open fail\n");
     while ((read = getline(&line, &len, fd) != -1)) {
@@ -153,7 +159,9 @@ int checkAuth(struct sockaddr_in clientIP, char* filename) {
             if (addrList == NULL)
                 printf("addrList is NULL\n");
             for (addr = addrList; addr != NULL; addr = addr->ai_next) {
-                numIPAddr = sockaddrToNum((struct sockaddr_in *)addr->ai_addr);            
+                //numIPAddr = sockaddrToNum((struct sockaddr_in *)addr->ai_addr);            
+                //TODO: test this conversion, reqIP is network order, numIPAddr either
+                numIPAddr = addr->ai_addr->s_addr;      // network ip
                 if (cmpNumIP(numIPAddr, reqIP, 32) == 1) { 
                     if (strcmp(comm, "deny") == 0) { 
                         return 0; 
