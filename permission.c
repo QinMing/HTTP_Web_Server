@@ -79,34 +79,6 @@ int cmpNumIP(unsigned long numIPAddr, unsigned long reqIP, unsigned int mask) {
     return 0;
 }
 
-unsigned long sockaddrToNum(struct sockaddr_in* sockIP) {
-    return ntohl(sockIP->sin_addr.s_addr);
-}
-
-unsigned long ipStrToNum(char strIP[]) {
-    unsigned long numIPAddr;
-    struct in_addr netAddr;
-    inet_aton(strIP, &netAddr);
-    numIPAddr = (unsigned long) netAddr.s_addr;
-    return numIPAddr;
-    /*char strIPAddr[4];
-    unsigned long numIPAddr = 0;
-    unsigned int offset = 24;
-    char *p, *pline;
-    pline = strIP;
-    while (1) {
-        bzero(strIPAddr, sizeof(strIPAddr));
-        p = strIPAddr;
-        while (*pline != '.' && *pline != '\0')
-            *p++ = *pline++;
-        numIPAddr += ((atoi(strIPAddr)) << offset);
-        if (*pline == '\0') 
-            return numIPAddr;
-        offset -= 8;
-        pline++;
-    }*/
-}
-
 int checkAuth(struct sockaddr_in clientIP, char* filename) {
     /*  
     input: open file directory, client ip address
@@ -121,11 +93,13 @@ int checkAuth(struct sockaddr_in clientIP, char* filename) {
     char *p = comm;
     char *pline;
     unsigned long numIPAddr, reqIP;
+    struct in_addr netIPAddr;
     char strIPAddr[20];
     unsigned int mask;
     char temp;
     struct addrinfo addrCriteria;
     struct addrinfo *addrList, *addr;
+    struct sockaddr_in* ai_addr_in;
     char addrString[MAXDOMAINLEN];
     const char portString[] = "0";
     int rtnVal;
@@ -159,9 +133,8 @@ int checkAuth(struct sockaddr_in clientIP, char* filename) {
             if (addrList == NULL)
                 printf("addrList is NULL\n");
             for (addr = addrList; addr != NULL; addr = addr->ai_next) {
-                //numIPAddr = sockaddrToNum((struct sockaddr_in *)addr->ai_addr);            
-                //TODO: test this conversion, reqIP is network order, numIPAddr either
-                numIPAddr = addr->ai_addr->s_addr;      // network ip
+                ai_addr_in = (struct sockaddr_in*)addr->ai_addr;
+                numIPAddr = ai_addr_in->sin_addr.s_addr;      // network ip
                 if (cmpNumIP(numIPAddr, reqIP, 32) == 1) { 
                     if (strcmp(comm, "deny") == 0) { 
                         return 0; 
@@ -184,7 +157,8 @@ int checkAuth(struct sockaddr_in clientIP, char* filename) {
                     break;
                 }
                 printf("strIPAddr %s\n", strIPAddr);
-                numIPAddr = ipStrToNum(strIPAddr);
+                inet_aton(strIPAddr, &netIPAddr);
+                numIPAddr = (unsigned long) netIPAddr.s_addr;
                 pline++;
             }
         } 
