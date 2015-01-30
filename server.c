@@ -1,5 +1,3 @@
-#include <stdio.h>
-#include <stdlib.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <string.h>
@@ -8,19 +6,14 @@
 #include <netinet/in.h>
 #include <pthread.h>
 #include <arpa/inet.h>
-#include <netdb.h>
-#include "permission.h"
 #include "common.h"
-
-const char defaultPage[] = "index.html";
+#include "permission.h"
+#include "stringProcessing.h"
 
 int running = 1;
 
 struct RespArg {
     int csock;
-    char rcvBuff[RCVBUFSIZE];
-    char comm[MAXCOMMLEN];
-    char fname[MAXFNAMELEN];
     struct sockaddr_in cli_addr;
 };
 
@@ -143,10 +136,12 @@ int sendInitLine(int csock, int code) {
     char s[256] = "HTTP/1.1 ";
 
     const char str200[] = "200 OK\r\n";
+    const char str400[] = "400 Bad Request\r\n"
+    "Content-Type: text/plain\r\n\r\nError 400 (Bad Request).\r\n\r\n";
     const char str404[] = "404 Not Found\r\n"
-        "Content-Type: text/plain\r\n\r\nError 404 (Not Found).\r\n";
+        "Content-Type: text/plain\r\n\r\nError 404 (Not Found).\r\n\r\n";
     const char str403[] = "403 Permission Denied\r\n"
-        "Content-Type: text/plain\r\n\r\nError 403 (Permission Denied).\r\n";
+        "Content-Type: text/plain\r\n\r\nError 403 (Permission Denied).\r\n\r\n";
 
     switch (code) {
 
@@ -154,28 +149,29 @@ int sendInitLine(int csock, int code) {
         strcat(s, str200);
         break;
 
+    case 400:
+        printf("debug, sending 400\n");
+        strcat(s, str400);
+        break;
+            
     case 404:
+        printf("debug, sending 404\n");
         strcat(s, str404);
         break;
     
     case 403:
+        printf("debug, sending 403\n");
         strcat(s, str403);
         break;
 
     default:
-        printf("Error: Unimplemented response code\n");
-        exit(-1);
+        error("Error: Unimplemented response code\n");
         break;
     }
     int l = strlen(s);
     if (write(csock, s, l) != l)
         error("Error when sending");
     return 0;
-}
-
-static inline void sendEmptyLine(int csock) {
-    if (write(csock, "\r\n", 2) != 2)
-        error("Error when sending");
 }
 
 int sendHeader(int csock, FileType type, int fileSize) {
@@ -203,7 +199,6 @@ int sendHeader(int csock, FileType type, int fileSize) {
 
     default:
         printf("Warning: Unimplemented file type\n");
-        //exit(-1);
         s[0] = '\0';
         break;
     }
@@ -222,7 +217,7 @@ int sendFile(int csock, char fname[]) {
     FileType type;
 
     //this will append the default page to fname if needed
-    type = checkFileType(fname);
+    type = getFileType(fname);
 
     //printf("[debug] file name: %s[end of debug]",fname);
 
@@ -257,9 +252,16 @@ int sendFile(int csock, char fname[]) {
 }
 
 void* response(void* args) {
+    int csock = (( struct RespArg* )args)->csock;
+    struct sockaddr_in cli_addr = (( struct RespArg* )args)->cli_addr;
+    free(( struct RespArg* )args);
+    
+    char rcvBuff[RCVBUFSIZE];
+    char fname[MAXFNAMELEN];
+    HttpVersion version;
+    Method method;
     int rcvMsgSize;
-    struct RespArg *args_t;
-    args_t = ( struct RespArg* ) args;
+
     /*
     unsigned int ip = args_t->cli_addr.sin_addr.s_addr;
     char ipClient[30];
@@ -267,12 +269,9 @@ void* response(void* args) {
     printf("Client IP %s\n", ipClient);*/
     
     //TODO get directory of htaccess after it has been checked to be correctly
-    if (checkAuth(args_t->cli_addr,".htaccess") == 0) {
-        sendInitLine(args_t->csock, 403);
-        sendEmptyLine(args_t->csock);
-        printf("debug, sending 403");
-        close(args_t->csock);
-        free(args_t);
+    if (checkAuth(cli_addr,".htaccess") == 0) {
+        sendInitLine(csock, 403);
+        close(csock);
         return NULL;
     }
      
@@ -289,42 +288,43 @@ void* response(void* args) {
     struct timeval tv;
     int ret = 1;
     while (ret != 0) {
-        FD_ZERO(&rdfds);
-        FD_SET(args_t->csock, &rdfds);
-        tv.tv_sec = 3;
-        tv.tv_usec = 0;
-        ret = select(args_t->csock + 1, &rdfds, NULL, NULL, &tv);
+        
         //printf("select return value %d\n", ret);
         if (ret < 0)
             error("Select() error");
         else if (ret>0) {
-            if (( rcvMsgSize = recv(args_t->csock, args_t->rcvBuff, RCVBUFSIZE, 0) ) < 0)
+            if (( rcvMsgSize = recv(csock, rcvBuff, RCVBUFSIZE, 0) ) < 0)
                 error("Receive error");
             //TODO: recv might receive part of the packet, as in the book
-            //Can this be accomplished by checking /r/n ?
-            printf("client socket: %d\n", args_t->csock);
-            args_t->rcvBuff[rcvMsgSize] = '\0';
-            //printf("%d\n", rcvMsgSize);
-            //printf("[Received]====================\n%s\n", args_t->rcvBuff);
-            getCommand(args_t->rcvBuff, args_t->comm, args_t->fname);
-            printf("[Received]---------------\n%s %s (...)\n", args_t->comm, args_t->fname);
-            if (strcmp("GET", args_t->comm) == 0) {
-                if (sendFile(args_t->csock, args_t->fname) == -1) {
-                    sendInitLine(args_t->csock, 404);
-                    sendEmptyLine(args_t->csock);
-                    //the status line is terminated by an empty line.
-                    //see http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
-                    printf("debug, sending 404\n");
+            //accomplished by checking /r/n/r/n
+            //and the head of a request might be in the last packet!
+            printf("client socket: %d\n", csock);
+            rcvBuff[rcvMsgSize] = '\0';
+            if (getCommand(rcvBuff, &method, fname, &version) == -1){
+                sendInitLine(csock, 400);
+                ret = 0;
+            }else if (method == GET) {
+                printf("[Receive request]path=%s\n", fname);
+                if (removeDotSegments(fname) == -1){
+                    sendInitLine(csock, 400);
+                    ret = 0;
+                }else if (sendFile(csock, fname) == -1) {
+                    sendInitLine(csock, 404);
                     ret = 0;
                 }
             }
         }
         if (ret == 0) {
-            //printf("closed socket %d\n", args_t->csock);
-            close(args_t->csock);
+            //printf("closed socket %d\n", csock);
+            close(csock);
+            break;
         }
+        FD_ZERO(&rdfds);
+        FD_SET(csock, &rdfds);
+        tv.tv_sec = 5;
+        tv.tv_usec = 0;
+        ret = select(csock + 1, &rdfds, NULL, NULL, &tv);
     }
-    free(args_t);
     return NULL;
 }
 
