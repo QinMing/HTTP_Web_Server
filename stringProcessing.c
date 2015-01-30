@@ -4,7 +4,9 @@
 
 const char defaultPage[] = "index.html";
 
-//TODO: check Complete packet
+int pushPackBuff(char packBuff[],){
+    
+}
 
 static inline int notEndingCharacter(char c) {
     return ( c != ' ' && c != '\t' && c != '\0' && c != '\r' && c != '\n' );

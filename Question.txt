@@ -1,6 +1,3 @@
-﻿Q: TCP is not closed if we telnet google, but in this project we just wait for a fix amount of time?
-
-Q: Can 404 and 403 contain body?
 
 
 (x)Q1: Why I cannot put the "close(csock)" inside of the if(fork()==0) area

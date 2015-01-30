@@ -251,6 +251,7 @@ int sendFile(int csock, char fname[]) {
     return 0;
 }
 
+//Only deal with GET. Assume client will not send body, but only initial line and headers.
 void* response(void* args) {
     int csock = (( struct RespArg* )args)->csock;
     struct sockaddr_in cli_addr = (( struct RespArg* )args)->cli_addr;
