@@ -51,3 +51,9 @@ Host: www.amazon.com
 ====>400 bad request
 
 
+Notes:
+
+1. Becareful of using string operation, data can have 0 in the middle of content. 
+2. Request version number may later than 1.1, now respond 1.1 or 1.0(if no pipeline is support)
+3. If the header have the "Connection: close" from client, no need to analyze it. 
+    if the server want to response "HTTP/1.1 400 client Error\r\nConnection: close" , then it can close the socket
