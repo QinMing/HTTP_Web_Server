@@ -24,7 +24,7 @@ typedef enum{
 
 typedef struct {
     int  restSize;
-    int  unconfirmSize
+    int  unconfirmSize;
     char *tail;
     char *nextHead;
     char buff[RCVBUFSIZE+1];

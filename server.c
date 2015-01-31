@@ -10,6 +10,9 @@
 #include "permission.h"
 #include "stringProcessing.h"
 
+#define WAITLONG 10
+#define WAITSHORT 5
+
 int running = 1;
 
 struct RespArg {
@@ -25,7 +28,7 @@ void* userIOSentry(void* sock) {
         key = getchar();
     } while (key != 'q' && key != 'Q');
     running = 0;
-    close(*((int*)sock));
+    close(*( (int*)sock ));
     //printf("see if this line in the thread can be reached.............");
     //A: Yes it can.
     return NULL;
@@ -35,11 +38,17 @@ int sendInitLine(int csock, int code) {
     char s[256] = "HTTP/1.1 ";
 
     const char str200[] = "200 OK\r\n";
+
     const char str400[] = "400 Bad Request\r\n"
-    "Content-Type: text/plain\r\n\r\nError 400 (Bad Request).\r\n\r\n";
+        "Connection: close\r\n"
+        "Content-Type: text/plain\r\n\r\nError 400 (Bad Request).\r\n\r\n";
+
     const char str404[] = "404 Not Found\r\n"
+        "Connection: close\r\n"
         "Content-Type: text/plain\r\n\r\nError 404 (Not Found).\r\n\r\n";
+
     const char str403[] = "403 Permission Denied\r\n"
+        "Connection: close\r\n"
         "Content-Type: text/plain\r\n\r\nError 403 (Permission Denied).\r\n\r\n";
 
     switch (code) {
@@ -52,12 +61,12 @@ int sendInitLine(int csock, int code) {
         printf("debug, sending 400\n");
         strcat(s, str400);
         break;
-            
+
     case 404:
         printf("debug, sending 404\n");
         strcat(s, str404);
         break;
-    
+
     case 403:
         printf("debug, sending 403\n");
         strcat(s, str403);
@@ -98,7 +107,7 @@ int sendHeader(int csock, FileType type, int fileSize) {
 
     default:
         printf("Warning: Unimplemented file type\n");
-        s[0] = '\0';
+        strcat(s, "application/octet-stream\r\n");
         break;
     }
     sprintf(s, "%sContent-Length: %d\r\n\r\n", s, fileSize);
@@ -150,94 +159,185 @@ int sendFile(int csock, char fname[]) {
     return 0;
 }
 
+//TODO Chunked transfer
+
 //Only deal with GET. Assume client will not send body, but only initial line and headers.
-void* response(void* args) {
-    int csock = (( struct RespArg* )args)->csock;
-    struct sockaddr_in cli_addr = (( struct RespArg* )args)->cli_addr;
-    free(( struct RespArg* )args);
-    
-    RecvBuff *recvBuff = newRecvBuff();
+//return -1 if csock need to be close
+//return 0 the request is complete, and successfully responsed
+//return 1 the request is not complete, still waiting.
+int responseRequest(int csock, RecvBuff* recvBuff) {
     char fname[MAXFNAMELEN];
     HttpVersion version;
     Method method;
 
-    /*
-    unsigned int ip = args_t->cli_addr.sin_addr.s_addr;
-    char ipClient[30];
-    sprintf(ipClient, "%d.%d.%d.%d", ((ip >> 0) & 0xFF), ((ip >> 8) & 0xFF), ((ip >> 16) & 0xFF), ((ip >> 24) & 0xFF));
-    printf("Client IP %s\n", ipClient);*/
-    
+    if (( recvBuff->unconfirmSize =
+        recv(csock, recvBuff->tail, recvBuff->restSize, 0) ) < 0)
+        error("Receive error");
+    if (!buffInspect(recvBuff)) return 1;
+
+    printf("client socket: %d\n", csock);
+    //rcvBuff[rcvMsgSize] = '\0'; !!careful!
+    if (getCommand(recvBuff->buff, &method, fname, &version) == -1) {
+        sendInitLine(csock, 400);
+        return -1;
+    }
+    if (method == GET) {
+        printf("[Receive request]path=%s\n", fname);
+        if (removeDotSegments(fname) == -1) {
+            sendInitLine(csock, 400);
+            return -1;
+        }
+        if (sendFile(csock, fname) == -1) {
+            sendInitLine(csock, 404);
+            return -1;
+        }
+    }
+    return buffChop(recvBuff);
+    //buffChop return 1: still has data
+}
+
+void* threadMain(void* args) {
+    // Guarantees that thread resources are deallocated upon return
+    pthread_detach(pthread_self());
+
+    int csock = ( ( struct RespArg* )args )->csock;
+    struct sockaddr_in cli_addr = ( ( struct RespArg* )args )->cli_addr;
+    free(( struct RespArg* )args);
+
     //TODO get directory of htaccess after it has been checked to be correctly
-    if (checkAuth(cli_addr,".htaccess") == 0) {
+    if (checkAuth(cli_addr, ".htaccess") == 0) {
         sendInitLine(csock, 403);
         close(csock);
         return NULL;
     }
-     
-    // Guarantees that thread resources are deallocated upon return
-    pthread_detach(pthread_self());
-    //Q: do we need to wait for the thread to finish, before the server exits by presing 'q' key ?
 
-    /*
-    use select() to try persistent connection
-    do not close the socket until timeout of select
-    */
+    RecvBuff *recvBuff = newRecvBuff();//remember deleteRecvBuff()
+    int ret = 1;
+    int timeout = WAITLONG;
     fd_set rdfds;
     //printf("I just want to know sizeof(rdfds):%d\n", sizeof(rdfds));
     struct timeval tv;
-    int ret = 1;
-    while (1) {
-        
-        //printf("select return value %d\n", ret);
-        if (ret < 0)
-            error("Select() error");
-        else if (ret>0) {
-            
-            do{
-                if (( recvBuff.unconfirmSize =
-                     recv(csock, recvBuff->tail, recvBuff->restSize, 0) ) < 0)
-                    error("Receive error");
-                
-                if (buffIsComplete(recvBuff)) break;
-                
-                FD_ZERO(&rdfds);
-                FD_SET(csock, &rdfds);
-                tv.tv_sec = 10;
-                tv.tv_usec = 0;
-                ret = select(csock + 1, &rdfds, NULL, NULL, &tv);
-            }while(ret > 0);
-            
-            printf("client socket: %d\n", csock);
-            //rcvBuff[rcvMsgSize] = '\0'; !!careful!
-            if (getCommand(recvBuff->buff, &method, fname, &version) == -1){
-                sendInitLine(csock, 400);
-                ret = 0;
-            }else if (method == GET) {
-                printf("[Receive request]path=%s\n", fname);
-                if (removeDotSegments(fname) == -1){
-                    sendInitLine(csock, 400);
-                    ret = 0;
-                }else if (sendFile(csock, fname) == -1) {
-                    sendInitLine(csock, 404);
-                    ret = 0;
-                }
-            }
-            buffChop(recvBuff);
-            
-        }
-        if (ret == 0) {
-            //printf("closed socket %d\n", csock);
-            close(csock);
-            break;
-        }
+
+    //use select() to try persistent connection
+    //do not close the socket until timeout of select
+    do{
         FD_ZERO(&rdfds);
         FD_SET(csock, &rdfds);
-        tv.tv_sec = 5;//TODO: configurable
+        tv.tv_sec = timeout;
         tv.tv_usec = 0;
         ret = select(csock + 1, &rdfds, NULL, NULL, &tv);
-    }
+        if (ret > 0) {
+            switch (responseRequest(csock, recvBuff)) {
+            case 1://expecting the rest of the request
+                timeout = WAITLONG;
+                break;
+
+            case 0://response complete
+                timeout = WAITSHORT;
+                break;
+
+            case -1://client error, close connection
+                ret = 0;
+                break;
+            }
+        } else if (ret < 0) {
+            error("Select() error");
+        }
+    } while (ret != 0);
+    //printf("closed socket %d\n", csock);
+    close(csock);
+    deleteRecvBuff(recvBuff);
     return NULL;
 }
+
+////Only deal with GET. Assume client will not send body, but only initial line and headers.
+//void* response(void* args) {
+//    int csock = ( ( struct RespArg* )args )->csock;
+//    struct sockaddr_in cli_addr = ( ( struct RespArg* )args )->cli_addr;
+//    free(( struct RespArg* )args);
+//
+//    RecvBuff *recvBuff = newRecvBuff();
+//    char fname[MAXFNAMELEN];
+//    HttpVersion version;
+//    Method method;
+//
+//    /*
+//    unsigned int ip = args_t->cli_addr.sin_addr.s_addr;
+//    char ipClient[30];
+//    sprintf(ipClient, "%d.%d.%d.%d", ((ip >> 0) & 0xFF), ((ip >> 8) & 0xFF), ((ip >> 16) & 0xFF), ((ip >> 24) & 0xFF));
+//    printf("Client IP %s\n", ipClient);*/
+//
+//    //TODO get directory of htaccess after it has been checked to be correctly
+//    if (checkAuth(cli_addr, ".htaccess") == 0) {
+//        sendInitLine(csock, 403);
+//        close(csock);
+//        return NULL;
+//    }
+//
+//    // Guarantees that thread resources are deallocated upon return
+//    pthread_detach(pthread_self());
+//    //Q: do we need to wait for the thread to finish, before the server exits by presing 'q' key ?
+//
+//    /*
+//    use select() to try persistent connection
+//    do not close the socket until timeout of select
+//    */
+//    fd_set rdfds;
+//    //printf("I just want to know sizeof(rdfds):%d\n", sizeof(rdfds));
+//    struct timeval tv;
+//    int ret = 1;
+//    while (1) {
+//
+//        //printf("select return value %d\n", ret);
+//        if (ret < 0)
+//            error("Select() error");
+//        else if (ret>0) {
+//
+//            do {
+//                if (( recvBuff->unconfirmSize =
+//                    recv(csock, recvBuff->tail, recvBuff->restSize, 0) ) < 0)
+//                    error("Receive error");
+//
+//                if (buffIsComplete(recvBuff)) break;
+//
+//                FD_ZERO(&rdfds);
+//                FD_SET(csock, &rdfds);
+//                tv.tv_sec = 10;
+//                tv.tv_usec = 0;
+//                ret = select(csock + 1, &rdfds, NULL, NULL, &tv);
+//            } while (ret > 0);
+//
+//            printf("client socket: %d\n", csock);
+//            //rcvBuff[rcvMsgSize] = '\0'; !!careful!
+//            if (getCommand(recvBuff->buff, &method, fname, &version) == -1) {
+//                sendInitLine(csock, 400);
+//                ret = 0;
+//            } else if (method == GET) {
+//                printf("[Receive request]path=%s\n", fname);
+//                if (removeDotSegments(fname) == -1) {
+//                    sendInitLine(csock, 400);
+//                    ret = 0;
+//                } else if (sendFile(csock, fname) == -1) {
+//                    sendInitLine(csock, 404);
+//                    ret = 0;
+//                }
+//            }
+//            buffChop(recvBuff);
+//
+//        }
+//        if (ret == 0) {
+//            //printf("closed socket %d\n", csock);
+//            close(csock);
+//            break;
+//        }
+//        FD_ZERO(&rdfds);
+//        FD_SET(csock, &rdfds);
+//        tv.tv_sec = 5;//TODO: configurable
+//        tv.tv_usec = 0;
+//        ret = select(csock + 1, &rdfds, NULL, NULL, &tv);
+//    }
+//    return NULL;
+//}
 
 int main(int argc, char* argv[]) {
     int sock, csock, portno;
@@ -274,13 +374,13 @@ int main(int argc, char* argv[]) {
     pthread_t thread;
     pthread_create(&thread, NULL, userIOSentry, (void*)&sock);
 
-    socklen_t cliaddr_len  = sizeof(cli_addr);
+    socklen_t cliaddr_len = sizeof(cli_addr);
     while (running) {
-        if (( csock = accept(sock, ( struct sockaddr* ) &cli_addr, &cliaddr_len) ) < 0){
-            if (running == 0){
+        if (( csock = accept(sock, ( struct sockaddr* ) &cli_addr, &cliaddr_len) ) < 0) {
+            if (running == 0) {
                 printf("Server exits normally.\n");
                 break;
-            }else{
+            } else {
                 error("Accepct error");
             }
         }
@@ -289,7 +389,7 @@ int main(int argc, char* argv[]) {
         args = malloc(sizeof(struct RespArg));
         args->csock = csock;
         args->cli_addr = cli_addr;
-        pthread_create(&thread, NULL, response, (void *)args);
+        pthread_create(&thread, NULL, threadMain, (void *)args);
     }
     return 0;
 }
