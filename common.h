@@ -22,6 +22,14 @@ typedef enum{
     GET
 } Method;
 
+typedef struct {
+    int  restSize;
+    int  unconfirmSize
+    char *tail;
+    char *nextHead;
+    char buff[RCVBUFSIZE+1];
+}RecvBuff;
+
 static inline void error(const char* msg) {
     perror(msg);
     exit(-1);

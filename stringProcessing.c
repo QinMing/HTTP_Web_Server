@@ -4,8 +4,60 @@
 
 const char defaultPage[] = "index.html";
 
-int pushPackBuff(char packBuff[],){
+RecvBuff* newRecvBuff(){
+    RecvBuff* b=malloc(sizeof(RecvBuff));
+    b.restSize=REVCBUFSIZE;
+    b.unconfirmSize = 0;
+    b.tail = buff;
+    b.nextHead=NULL;
+    return b;
+}
+
+inline void deleteRecvBuff(RecvBuff * b){
+    free(b);
+}
+
+//This function will check all unconfirmed data in the
+//buffer, and change the pointers and sizes.
+//only b.unconfirmSize is set outside of here
+//
+//return 1: yes. "\r\n\r\n" is found
+//return 0: no
+int buffIsComplete(RecvBuff * b){
+    //if (b.unconfirSize == 0) return 0;
     
+    char *newtail = b.tail + b.unconfirmSize;
+    char *it = b.tail;
+    b.nextHead=NULL;
+    for(;it!=newtail;++it){
+        //must search forward in case there are multiple \r\n\r\n
+        if (strncmp(it,"\r\n\r\n",4)==0){
+            b.nextHead = it+4;
+            break;
+        }
+    }
+    b.restSize -= b.unconfirmSize;
+    b.unconfirmSize = 0;
+    b.tail = newtail;
+    if (b.nextHead==NULL){
+        return 0;
+    }else {
+        return 1;
+    }
+}
+
+//this function can only be called after buffIsComplete() returns yes;
+//It copy the string from *nextHead to the head of the buffer.
+int buffChop(RecvBuff * b){
+    char *src = b.nextHead;
+    char *dst = b.buff;
+    for (; src != b.tail; ++dst,++src){
+        *dst = *src;
+    }
+    restSize+= b.nextHead - b.buff;
+    b.tail = dst;
+    b.nextHead = NULL;
+    return 0;
 }
 
 static inline int notEndingCharacter(char c) {
@@ -22,6 +74,7 @@ static inline void nextToken(char **ptr){
 //version is like "1.1"
 //Input: first line of request
 //Output: fname is a raw URI
+//NOTE: careful when changing this function. CommLine is not null-ending.
 int getCommand(char* commLine, Method* method, char* fname, HttpVersion *version) {
     char *ptr;
     int i;
