@@ -1,3 +1,6 @@
+﻿2015年1月27日星期二 8:03:10
+unknown type xx/stream
+
 2015年01月23日 discussion
 HTTP/1.1 400 XXX
 Connection: close
