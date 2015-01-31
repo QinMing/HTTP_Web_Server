@@ -1,4 +1,4 @@
-allow from 127.0.0.2/30
+allow from 127.0.0.1/32
 deny from ieng6-201.ucsd.edu
 deny from 172.22.16.18/32
 allow from 172.22.16.0/24

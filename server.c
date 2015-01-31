@@ -150,16 +150,16 @@ int sendFile(int csock, char fname[]) {
     return 0;
 }
 
+//Only deal with GET. Assume client will not send body, but only initial line and headers.
 void* response(void* args) {
     int csock = (( struct RespArg* )args)->csock;
     struct sockaddr_in cli_addr = (( struct RespArg* )args)->cli_addr;
     free(( struct RespArg* )args);
     
-    char rcvBuff[RCVBUFSIZE];
+    RecvBuff *recvBuff = newRecvBuff();
     char fname[MAXFNAMELEN];
     HttpVersion version;
     Method method;
-    int rcvMsgSize;
 
     /*
     unsigned int ip = args_t->cli_addr.sin_addr.s_addr;
@@ -186,20 +186,30 @@ void* response(void* args) {
     //printf("I just want to know sizeof(rdfds):%d\n", sizeof(rdfds));
     struct timeval tv;
     int ret = 1;
-    while (ret != 0) {
+    while (1) {
         
         //printf("select return value %d\n", ret);
         if (ret < 0)
             error("Select() error");
         else if (ret>0) {
-            if (( rcvMsgSize = recv(csock, rcvBuff, RCVBUFSIZE, 0) ) < 0)
-                error("Receive error");
-            //TODO: recv might receive part of the packet, as in the book
-            //accomplished by checking /r/n/r/n
-            //and the head of a request might be in the last packet!
+            
+            do{
+                if (( recvBuff.unconfirmSize =
+                     recv(csock, recvBuff->tail, recvBuff->restSize, 0) ) < 0)
+                    error("Receive error");
+                
+                if (buffIsComplete(recvBuff)) break;
+                
+                FD_ZERO(&rdfds);
+                FD_SET(csock, &rdfds);
+                tv.tv_sec = 10;
+                tv.tv_usec = 0;
+                ret = select(csock + 1, &rdfds, NULL, NULL, &tv);
+            }while(ret > 0);
+            
             printf("client socket: %d\n", csock);
-            rcvBuff[rcvMsgSize] = '\0';
-            if (getCommand(rcvBuff, &method, fname, &version) == -1){
+            //rcvBuff[rcvMsgSize] = '\0'; !!careful!
+            if (getCommand(recvBuff->buff, &method, fname, &version) == -1){
                 sendInitLine(csock, 400);
                 ret = 0;
             }else if (method == GET) {
@@ -212,6 +222,8 @@ void* response(void* args) {
                     ret = 0;
                 }
             }
+            buffChop(recvBuff);
+            
         }
         if (ret == 0) {
             //printf("closed socket %d\n", csock);
@@ -220,7 +232,7 @@ void* response(void* args) {
         }
         FD_ZERO(&rdfds);
         FD_SET(csock, &rdfds);
-        tv.tv_sec = 5;
+        tv.tv_sec = 5;//TODO: configurable
         tv.tv_usec = 0;
         ret = select(csock + 1, &rdfds, NULL, NULL, &tv);
     }
