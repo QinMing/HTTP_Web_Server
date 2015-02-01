@@ -31,8 +31,16 @@ void* userIOSentry(void* sock) {
     return NULL;
 }
 
-int sendInitLine(int csock, int code) {
-    char s[256] = "HTTP/1.1 ";
+//In this project, assume older version can only be exactly HTTP/1.0
+int isVerLower(HttpVersion ver) {
+    const HttpVersion myVer = {1,1};
+    return ( ( ver.major < myVer.major ) || ( ver.major == myVer.major && ver.minor < myVer.minor ) );
+}
+
+int sendInitLine(int csock, int code, HttpVersion ver) {
+
+    const char strVer10[] = "HTTP/1.0 ";
+    const char strVer11[] = "HTTP/1.1 ";
 
     const char str200[] = "200 OK\r\n";
 
@@ -47,6 +55,15 @@ int sendInitLine(int csock, int code) {
     const char str403[] = "403 Permission Denied\r\n"
         "Connection: close\r\n"
         "Content-Type: text/plain\r\n\r\nError 403 (Permission Denied).\r\n\r\n";
+
+    //increase if necessary
+    char s[1024];
+
+    if (isVerLower(ver)) {
+        strcat(s, strVer10);
+    } else {
+        strcat(s, strVer11);
+    }
 
     switch (code) {
 
@@ -116,7 +133,7 @@ int sendHeader(int csock, FileType type, int fileSize) {
     return 0;
 }
 
-int sendFile(int csock, char fname[]) {
+int sendFile(int csock, char fname[], HttpVersion ver) {
     FILE* fd;
     int fsize;
     FileType type;
@@ -138,7 +155,7 @@ int sendFile(int csock, char fname[]) {
     //printf("debug, fd = %lld\n", (long long int)fd);
     if (fd == NULL) return -1;//send 404 later
 
-    sendInitLine(csock, 200);
+    sendInitLine(csock, 200, ver);
 
     fseek(fd, 0, SEEK_END);  // set the position of fd in file end(SEEK_END)
     fsize = ftell(fd);       // return the fd current offset to beginning
@@ -175,10 +192,10 @@ int sendFile(int csock, char fname[]) {
 //TODO Chunked transfer
 
 //Only deal with GET. Assume client will not send body, but only initial line and headers.
-//return -1 if csock need to be close
+//return -1 if csock need to be close. Maybe client error or HTTP/1.0
 //return 0 the request is complete, and successfully responsed
 //return 1 the request is not complete, still waiting.
-int responseRequest(int csock, RecvBuff* recvBuff) {
+int responseRequest(int csock, RecvBuff* recvBuff, struct sockaddr_in *cli_addr) {
     char fname[MAXFNAMELEN];
     HttpVersion version;
     Method method;
@@ -191,17 +208,24 @@ int responseRequest(int csock, RecvBuff* recvBuff) {
     printf("client socket: %d\n", csock);
     //rcvBuff[rcvMsgSize] = '\0'; !!careful!
     if (getCommand(recvBuff->buff, &method, fname, &version) == -1) {
-        sendInitLine(csock, 400);
+        sendInitLine(csock, 400, version);
         return -1;
-    }
+    }    
     if (method == GET) {
         printf("[Receive request]path=%s\n", fname);
         if (removeDotSegments(fname) == -1) {
-            sendInitLine(csock, 400);
+            sendInitLine(csock, 400, version);
             return -1;
         }
-        if (sendFile(csock, fname) == -1) {
-            sendInitLine(csock, 404);
+
+        //TODO get directory of htaccess after it has been checked to be correctly
+        if (checkAuth(*cli_addr, ".htaccess") == 0) {
+            sendInitLine(csock, 403, version);
+            return -1;
+        }
+
+        if (sendFile(csock, fname, version) == -1) {
+            sendInitLine(csock, 404, version);
             return -1;
         }
     }
@@ -216,12 +240,6 @@ void* threadMain(void* args) {
     int csock = ( ( struct RespArg* )args )->csock;
     struct sockaddr_in cli_addr = ( ( struct RespArg* )args )->cli_addr;
     free(( struct RespArg* )args);
-    //TODO get directory of htaccess after it has been checked to be correctly
-    if (checkAuth(cli_addr, ".htaccess") == 0) {
-        sendInitLine(csock, 403);
-        close(csock);
-        return NULL;
-    }
 
     RecvBuff *recvBuff = newRecvBuff();//remember deleteRecvBuff()
     int ret = 1;
@@ -236,9 +254,9 @@ void* threadMain(void* args) {
         FD_SET(csock, &rdfds);
         tv.tv_sec = timeout;
         tv.tv_usec = 0;
-        ret = select(csock + 1, &rdfds, NULL, NULL, &tv);
+        ret = select(csock, &rdfds, NULL, NULL, &tv);
         if (ret > 0) {
-            switch (responseRequest(csock, recvBuff)) {
+            switch (responseRequest(csock + 1, recvBuff, &cli_addr)) {
             case 1://expecting the rest of the request
                 timeout = WAITLONG;
                 break;
@@ -247,7 +265,7 @@ void* threadMain(void* args) {
                 timeout = WAITSHORT;
                 break;
 
-            case -1://client error, close connection
+            case -1://client error or HTTP/1.0, close connection
                 ret = 0;
                 break;
             }
@@ -300,7 +318,6 @@ int main(int argc, char* argv[]) {
     while (running) {
         if (( csock = accept(sock, ( struct sockaddr* ) &cli_addr, &cliaddr_len) ) < 0) {
             if (running == 0) {
-                printf("Server exits normally.\n");
                 break;
             } else {
                 error("Accepct error");
@@ -312,5 +329,6 @@ int main(int argc, char* argv[]) {
         args->cli_addr = cli_addr;
         pthread_create(&thread, NULL, threadMain, (void *)args);
     }
+    printf("Server exits normally.\n");
     return 0;
 }

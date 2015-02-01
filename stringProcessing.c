@@ -134,10 +134,17 @@ int getCommand(char* commLine, Method* method, char* fname, HttpVersion *version
 
     //should reach end of line
     nextToken(&ptr);
-    if (strncmp(ptr, "\r\n", 2) == 0 || *ptr == '\n')
-        return 0;
-    else
+    if (!(strncmp(ptr, "\r\n", 2) == 0 || *ptr == '\n'))
         return -1;
+
+    //check if there is Host header, if HTTP/1.1 or above
+    ++ptr;
+    if (*ptr == '\n') ++ptr;
+    if (!isVerLower(*version)) {
+        //TODO
+
+    }
+    return 0;
 }
 
 //Check the file type though its file name,
