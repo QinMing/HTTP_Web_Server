@@ -254,9 +254,9 @@ void* threadMain(void* args) {
         FD_SET(csock, &rdfds);
         tv.tv_sec = timeout;
         tv.tv_usec = 0;
-        ret = select(csock, &rdfds, NULL, NULL, &tv);
+        ret = select(csock + 1, &rdfds, NULL, NULL, &tv);
         if (ret > 0) {
-            switch (responseRequest(csock + 1, recvBuff, &cli_addr)) {
+            switch (responseRequest(csock, recvBuff, &cli_addr)) {
             case 1://expecting the rest of the request
                 timeout = WAITLONG;
                 break;
