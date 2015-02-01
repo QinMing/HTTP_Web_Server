@@ -10,9 +10,6 @@
 #include "permission.h"
 #include "stringProcessing.h"
 
-#define WAITLONG 10
-#define WAITSHORT 5
-
 int running = 1;
 
 struct RespArg {
@@ -149,11 +146,27 @@ int sendFile(int csock, char fname[]) {
 
     sendHeader(csock, type, fsize);
 
-    char *content = (char*)malloc(fsize);
-    if (( fread(content, 1, fsize, fd) ) != fsize)
-        error("Read file error");
-    if (( write(csock, content, fsize) ) != fsize)
-        error("Send error");
+    //
+    //Sending file in chunks if necessary
+    //
+    int chunkSize;
+    if (fsize > SENDSIZE) {
+        chunkSize = SENDSIZE;
+    } else {
+        chunkSize = fsize;
+    }
+    char *content = (char*)malloc(chunkSize);
+    while (fsize > 0) {
+        if (fsize < SENDSIZE) {
+            chunkSize = fsize;
+        }
+        if (( fread(content, 1, chunkSize, fd) ) != chunkSize)
+            error("Read file error");
+        if (( write(csock, content, chunkSize) ) != chunkSize)
+            error("Send error");
+        fsize -= chunkSize;
+    }
+
     free(content);
     fclose(fd);
     return 0;
@@ -203,7 +216,6 @@ void* threadMain(void* args) {
     int csock = ( ( struct RespArg* )args )->csock;
     struct sockaddr_in cli_addr = ( ( struct RespArg* )args )->cli_addr;
     free(( struct RespArg* )args);
-
     //TODO get directory of htaccess after it has been checked to be correctly
     if (checkAuth(cli_addr, ".htaccess") == 0) {
         sendInitLine(csock, 403);
@@ -217,7 +229,6 @@ void* threadMain(void* args) {
     fd_set rdfds;
     //printf("I just want to know sizeof(rdfds):%d\n", sizeof(rdfds));
     struct timeval tv;
-
     //use select() to try persistent connection
     //do not close the socket until timeout of select
     do{
@@ -249,95 +260,6 @@ void* threadMain(void* args) {
     deleteRecvBuff(recvBuff);
     return NULL;
 }
-
-////Only deal with GET. Assume client will not send body, but only initial line and headers.
-//void* response(void* args) {
-//    int csock = ( ( struct RespArg* )args )->csock;
-//    struct sockaddr_in cli_addr = ( ( struct RespArg* )args )->cli_addr;
-//    free(( struct RespArg* )args);
-//
-//    RecvBuff *recvBuff = newRecvBuff();
-//    char fname[MAXFNAMELEN];
-//    HttpVersion version;
-//    Method method;
-//
-//    /*
-//    unsigned int ip = args_t->cli_addr.sin_addr.s_addr;
-//    char ipClient[30];
-//    sprintf(ipClient, "%d.%d.%d.%d", ((ip >> 0) & 0xFF), ((ip >> 8) & 0xFF), ((ip >> 16) & 0xFF), ((ip >> 24) & 0xFF));
-//    printf("Client IP %s\n", ipClient);*/
-//
-//    //TODO get directory of htaccess after it has been checked to be correctly
-//    if (checkAuth(cli_addr, ".htaccess") == 0) {
-//        sendInitLine(csock, 403);
-//        close(csock);
-//        return NULL;
-//    }
-//
-//    // Guarantees that thread resources are deallocated upon return
-//    pthread_detach(pthread_self());
-//    //Q: do we need to wait for the thread to finish, before the server exits by presing 'q' key ?
-//
-//    /*
-//    use select() to try persistent connection
-//    do not close the socket until timeout of select
-//    */
-//    fd_set rdfds;
-//    //printf("I just want to know sizeof(rdfds):%d\n", sizeof(rdfds));
-//    struct timeval tv;
-//    int ret = 1;
-//    while (1) {
-//
-//        //printf("select return value %d\n", ret);
-//        if (ret < 0)
-//            error("Select() error");
-//        else if (ret>0) {
-//
-//            do {
-//                if (( recvBuff->unconfirmSize =
-//                    recv(csock, recvBuff->tail, recvBuff->restSize, 0) ) < 0)
-//                    error("Receive error");
-//
-//                if (buffIsComplete(recvBuff)) break;
-//
-//                FD_ZERO(&rdfds);
-//                FD_SET(csock, &rdfds);
-//                tv.tv_sec = 10;
-//                tv.tv_usec = 0;
-//                ret = select(csock + 1, &rdfds, NULL, NULL, &tv);
-//            } while (ret > 0);
-//
-//            printf("client socket: %d\n", csock);
-//            //rcvBuff[rcvMsgSize] = '\0'; !!careful!
-//            if (getCommand(recvBuff->buff, &method, fname, &version) == -1) {
-//                sendInitLine(csock, 400);
-//                ret = 0;
-//            } else if (method == GET) {
-//                printf("[Receive request]path=%s\n", fname);
-//                if (removeDotSegments(fname) == -1) {
-//                    sendInitLine(csock, 400);
-//                    ret = 0;
-//                } else if (sendFile(csock, fname) == -1) {
-//                    sendInitLine(csock, 404);
-//                    ret = 0;
-//                }
-//            }
-//            buffChop(recvBuff);
-//
-//        }
-//        if (ret == 0) {
-//            //printf("closed socket %d\n", csock);
-//            close(csock);
-//            break;
-//        }
-//        FD_ZERO(&rdfds);
-//        FD_SET(csock, &rdfds);
-//        tv.tv_sec = 5;//TODO: configurable
-//        tv.tv_usec = 0;
-//        ret = select(csock + 1, &rdfds, NULL, NULL, &tv);
-//    }
-//    return NULL;
-//}
 
 int main(int argc, char* argv[]) {
     int sock, csock, portno;
@@ -384,7 +306,6 @@ int main(int argc, char* argv[]) {
                 error("Accepct error");
             }
         }
-        printf("master thread call one time **********\n");
         struct RespArg *args;
         args = malloc(sizeof(struct RespArg));
         args->csock = csock;

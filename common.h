@@ -3,11 +3,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#define SENDSIZE 8192
 #define RCVBUFSIZE 1440
 #define MAXCOMMLEN 10
 #define MAXFNAMELEN 256
 #define MAXVERSIONLEN 32
 #define MAXDOMAINLEN 256
+
+#define WAITLONG 10
+#define WAITSHORT 5
 
 typedef struct {
     int major;
