@@ -219,10 +219,13 @@ int responseRequest(int csock, RecvBuff* recvBuff, struct sockaddr_in *cli_addr)
         }
 
         //TODO get directory of htaccess after it has been checked to be correctly
-        if (checkAuth(*cli_addr, ".htaccess") == 0) {
+        char* htaccPath = getHtaccessPath(fname);
+        if (checkAuth(*cli_addr, htaccPath) == 0) {
             sendInitLine(csock, 403, version);
+            free(htaccPath);
             return -1;
         }
+        free(htaccPath);
 
         if (sendFile(csock, fname, version) == -1) {
             sendInitLine(csock, 404, version);

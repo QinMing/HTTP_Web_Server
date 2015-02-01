@@ -16,6 +16,7 @@ extern int buffInspect(RecvBuff * b);
 extern int buffChop(RecvBuff * b);
 //=============================
 
+extern char* getHtaccessPath(char fname[]);
 
 extern int getCommand(char* commLine, Method* method, char* fname, HttpVersion *version);
 extern FileType getFileType(char *fname);

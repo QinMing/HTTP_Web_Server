@@ -20,6 +20,7 @@ void deleteRecvBuff(RecvBuff * b) {
 //This function will check all unconfirmed data in the
 //buffer, and change the pointers and sizes.
 //only b->unconfirmSize is set outside of here
+//Note: "\n\n" is not supported. A request must contain "\r\n\r\n".
 //
 //return 1: yes. "\r\n\r\n" is found
 //return 0: no
@@ -63,6 +64,21 @@ int buffChop(RecvBuff * b) {
     return (b->tail != b->buff);
 }
 
+//string needs to be delete outside
+char* getHtaccessPath(char fname[]) {
+    char *tail = strrchr(fname, '/');
+    char *head = malloc(MAXFNAMELEN);
+    char *dst,*src;
+
+    dst = head;
+    src = fname;
+    while (src != tail) {
+        *(dst++) = *(src++);
+    }
+    strcpy(dst, "/.htaccess");
+    return head;
+}
+
 static inline int notEndingCharacter(char c) {
     return ( c != ' ' && c != '\t' && c != '\0' && c != '\r' && c != '\n' );
 }
@@ -78,6 +94,7 @@ static inline void nextToken(char **ptr) {
 //Input: first line of request
 //Output: fname is a raw URI
 //NOTE: careful when changing this function. CommLine is not null-ending.
+//A request must contain "\r\n\r\n" when checking the host header
 int getCommand(char* commLine, Method* method, char* fname, HttpVersion *version) {
     char *ptr;
     int i;
@@ -138,13 +155,19 @@ int getCommand(char* commLine, Method* method, char* fname, HttpVersion *version
         return -1;
 
     //check if there is Host header, if HTTP/1.1 or above
-    ++ptr;
-    if (*ptr == '\n') ++ptr;
-    if (!isVerLower(*version)) {
-        //TODO
-
+    if (isVerLower(*version)) {
+        return 0;
+    } else {
+        ++ptr;
+        if (*ptr == '\n') ++ptr;
+        while (strncmp(ptr, "\r\n\r\n", 4) != 0) {
+            if (strncmp(ptr, "Host", 4) == 0)return 0;
+            if (strncmp(ptr, "host", 4) == 0)return 0;
+            if (strncmp(ptr, "HOST", 4) == 0)return 0;
+            ++ptr;
+        }
+        return -1;
     }
-    return 0;
 }
 
 //Check the file type though its file name,

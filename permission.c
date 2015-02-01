@@ -110,8 +110,12 @@ int checkAuth(struct sockaddr_in clientIP, char* filename) {
 
     //reqIP = ntohl(clientIP.sin_addr.s_addr);
     reqIP = clientIP.sin_addr.s_addr;
-    if ((fd = fopen(filename, "r")) == NULL)
-        error(".htaccess file open fail\n");
+    if (( fd = fopen(filename, "r") ) == NULL) {
+        //error(".htaccess file open fail\n");
+        //should have deny. But for experiment, allow
+        return 1;
+    }
+
     while ((read = getline(&line, &len, fd) != -1)) {
         bzero(comm, sizeof(comm));
         pline = line;
