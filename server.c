@@ -204,16 +204,19 @@ int responseRequest(int csock, RecvBuff* recvBuff, struct sockaddr_in *cli_addr)
     if (( recvBuff->unconfirmSize =
         recv(csock, recvBuff->tail, recvBuff->restSize, 0) ) < 0)
         error("Receive error");
-    //printf("before inspect %s\n", recvBuff->buff);
-    if (!buffInspect(recvBuff)) return 1;
-
-    //printf("after inspect %s\n", recvBuff->buff);
+    if (recvBuff->unconfirmSize == 0) 
+        return 0;
+    printf("before inspect %s\n", recvBuff->buff);
+    if (!buffInspect(recvBuff)) 
+       return 1;
+        //printf("after inspect %s\n", recvBuff->buff);
     printf("client socket: %d\n", csock);
     //rcvBuff[rcvMsgSize] = '\0'; !!careful!
     if (getCommand(recvBuff->buff, &method, fname, &version) == -1) {
         sendInitLine(csock, 400, version);
         return -1;
     }    
+    //printf("receive command %s\n", recvBuff->buff);
     if (method == GET) {
         printf("[Receive request]path=%s\n", fname);
         if (removeDotSegments(fname) == -1) {
@@ -285,6 +288,8 @@ void* threadMain(void* args) {
         }
     } while (ret != 0);
     //printf("closed socket %d\n", csock);
+    if (ret == 0 || timeout == WAITLONG)
+        printf("connection timeout\n");
     close(csock);
     deleteRecvBuff(recvBuff);
     return NULL;

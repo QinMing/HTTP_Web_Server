@@ -34,7 +34,7 @@ int buffInspect(RecvBuff * b) {
     char *it = b->tail;
     b->nextHead = NULL;
     for (; it != newtail; ++it) {
-        if (*it == *b->ptrEnd) {
+        if (*it == *(b->ptrEnd)) {
             b->ptrEnd++;
             if (b->startMatch == 0)
                 b->startMatch = 1;
