@@ -31,6 +31,8 @@ typedef struct {
     int  unconfirmSize;
     char *tail;
     char *nextHead;
+    char *ptrEnd;
+    int startMatch;
     char buff[RCVBUFSIZE+1];
 }RecvBuff;
 

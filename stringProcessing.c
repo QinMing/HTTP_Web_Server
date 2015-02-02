@@ -3,6 +3,7 @@
 #include "common.h"
 
 const char defaultPage[] = "index.html";
+char carriage[5] = "\r\n\r\n";
 
 RecvBuff* newRecvBuff() {
     RecvBuff* b = malloc(sizeof(RecvBuff));
@@ -10,6 +11,8 @@ RecvBuff* newRecvBuff() {
     b->unconfirmSize = 0;
     b->tail = b->buff;
     b->nextHead = NULL;
+    b->ptrEnd = carriage;
+    b->startMatch = 0;
     return b;
 }
 
@@ -25,26 +28,33 @@ void deleteRecvBuff(RecvBuff * b) {
 //return 1: yes. "\r\n\r\n" is found
 //return 0: no
 int buffInspect(RecvBuff * b) {
-    //if (b->unconfirSize == 0) return 0;
-
     char *newtail = b->tail + b->unconfirmSize;
+    printf("unconfirmSize %d\n", b->unconfirmSize);
+        
     char *it = b->tail;
     b->nextHead = NULL;
     for (; it != newtail; ++it) {
-        //must search forward in case there are multiple \r\n\r\n
-        if (strncmp(it, "\r\n\r\n", 4) == 0) {
-            b->nextHead = it + 4;
-            break;
+        if (*it == *b->ptrEnd) {
+            b->ptrEnd++;
+            if (b->startMatch == 0)
+                b->startMatch = 1;
+        }
+        else {
+            if (b->startMatch == 1) {
+                b->ptrEnd = carriage;
+                b->startMatch = 0;
+            }
         }
     }
     b->restSize -= b->unconfirmSize;
     b->unconfirmSize = 0;
     b->tail = newtail;
-    if (b->nextHead == NULL) {
-        return 0;
-    } else {
-        return 1;
+    if (*b->ptrEnd == '\0') {
+        b->nextHead = b->tail;
+        return 1;   
     }
+    else
+        return 0;
 }
 
 //this function can only be called after buffIsComplete() returns yes;
@@ -106,6 +116,7 @@ int getCommand(char* commLine, Method* method, char* fname, HttpVersion *version
         *method = GET;
         ptr += 3;
     } else {
+        printf("not GET command\n");
         return -1;
     }
 

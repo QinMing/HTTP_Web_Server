@@ -204,8 +204,10 @@ int responseRequest(int csock, RecvBuff* recvBuff, struct sockaddr_in *cli_addr)
     if (( recvBuff->unconfirmSize =
         recv(csock, recvBuff->tail, recvBuff->restSize, 0) ) < 0)
         error("Receive error");
+    //printf("before inspect %s\n", recvBuff->buff);
     if (!buffInspect(recvBuff)) return 1;
 
+    //printf("after inspect %s\n", recvBuff->buff);
     printf("client socket: %d\n", csock);
     //rcvBuff[rcvMsgSize] = '\0'; !!careful!
     if (getCommand(recvBuff->buff, &method, fname, &version) == -1) {
