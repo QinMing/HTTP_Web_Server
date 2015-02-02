@@ -200,26 +200,31 @@ int responseRequest(int csock, RecvBuff* recvBuff, struct sockaddr_in *cli_addr)
     char fname[MAXFNAMELEN];
     HttpVersion version;
     Method method;
-    //int ret;
+    int newRecvSize;
 
-    if (( recvBuff->unconfirmSize =
-        recv(csock, recvBuff->tail, recvBuff->restSize, 0) ) < 0)
+    if (recvBuff->restSize <= 0) {
+        sendInitLine(csock, 400, version);
+        return -1;
+    }
+
+    if ((newRecvSize=recv(csock, recvBuff->tail, recvBuff->restSize, 0)) < 0)
         error("Receive error");
-    if (recvBuff->unconfirmSize == 0) 
+    if (newRecvSize == 0) 
         return 0;
+    printf("recv buff %d\n%s\n", newRecvSize, recvBuff->tail);
+    recvBuff->unconfirmSize += newRecvSize;
+    recvBuff->restSize -= newRecvSize;
+    recvBuff->tail += newRecvSize;
     while (recvBuff->unconfirmSize > 0) {
         if (!buffInspect(recvBuff)) 
             return 1;
         printf("client socket: %d\n", csock);
-        //rcvBuff[rcvMsgSize] = '\0'; !!careful!
-        if (getCommand(recvBuff->nextHead, &method, fname, &version) == -1) {
+        if (getCommand(recvBuff->buff, &method, fname, &version) == -1) {
             sendInitLine(csock, 400, version);
             return -1;
         }
-        recvBuff->nextHead = recvBuff->tail;    
-        //printf("receive command %s\n", recvBuff->buff);
         if (method == GET) {
-            printf("[Receive request]path=%s\n", fname);
+            //printf("[Receive request]path=%s\n", fname);
             if (removeDotSegments(fname) == -1) {
                 sendInitLine(csock, 400, version);
                 return -1;
@@ -239,11 +244,9 @@ int responseRequest(int csock, RecvBuff* recvBuff, struct sockaddr_in *cli_addr)
                 return -1;
             }
         }
-    //ret = buffChop(recvBuff);
+        buffChop(recvBuff);
     }
-    //return ret;
     return 0;
-    //buffChop return 1: still has data
 }
 
 void* threadMain(void* args) {

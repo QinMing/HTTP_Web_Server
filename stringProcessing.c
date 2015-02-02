@@ -22,20 +22,13 @@ void deleteRecvBuff(RecvBuff * b) {
 
 //This function will check all unconfirmed data in the
 //buffer, and change the pointers and sizes.
-//only b->unconfirmSize is set outside of here
 //Note: "\n\n" is not supported. A request must contain "\r\n\r\n".
 //
 //return 1: yes. "\r\n\r\n" is found
 //return 0: no
 int buffInspect(RecvBuff * b) {
-    char *newtail = b->tail + b->unconfirmSize;
-    printf("unconfirmSize %d\n", b->unconfirmSize);
-    printf("received buffer\n%s\n", b->buff);
-    //printf("tail buffer\n%s\n", b->tail);
-        
-    char *it = b->tail;
-    //b->nextHead = NULL;
-    for (; it != newtail; ++it) {
+    char *it = b->tail - b->unconfirmSize;
+    for (; it != b->tail; ++it) {
         if (*it == *(b->ptrEnd)) {
             b->ptrEnd++;
             if (b->startMatch == 0)
@@ -52,11 +45,10 @@ int buffInspect(RecvBuff * b) {
             break;
         }
     }
-    b->unconfirmSize = newtail - it;
-    b->restSize -= b->unconfirmSize;
-    b->tail = it;
+    b->unconfirmSize = b->tail - it;
+    //b->restSize -= b->unconfirmSize;
     if (*b->ptrEnd == '\0') {
-       //b->nextHead = b->tail;
+       b->nextHead = it;
        b->ptrEnd = carriage;
        return 1;   
     }       
@@ -77,14 +69,10 @@ int buffChop(RecvBuff * b) {
         dst++;
         src++;
     } 
-    /*for (; src != b->tail; ++dst, ++src) {
-        *dst = *src;
-    }*/
     *dst = '\0';
-    b->restSize += b->nextHead - b->buff;
+    b->restSize += (b->nextHead - b->buff);
     b->tail = dst;
-    b->nextHead = NULL;
-
+    b->nextHead = b->buff;
     return (b->tail != b->buff);
 }
 
