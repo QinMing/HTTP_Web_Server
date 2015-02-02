@@ -6,6 +6,7 @@
 #include <netinet/in.h>
 #include <pthread.h>
 #include <arpa/inet.h>
+#include <errno.h>
 #include "common.h"
 #include "permission.h"
 #include "stringProcessing.h"
@@ -238,7 +239,12 @@ int responseRequest(int csock, RecvBuff* recvBuff, struct sockaddr_in *cli_addr)
 
 void* threadMain(void* args) {
     // Guarantees that thread resources are deallocated upon return
-    pthread_detach(pthread_self());
+    int errno;
+    errno = pthread_detach(pthread_self());
+    if (errno == EINVAL)
+        error("Thread is not joinable  thread");
+    if (errno == ESRCH)
+        error("Thread cannot be found");
 
     int csock = ( ( struct RespArg* )args )->csock;
     struct sockaddr_in cli_addr = ( ( struct RespArg* )args )->cli_addr;
