@@ -227,8 +227,9 @@ int responseRequest(int csock, RecvBuff* recvBuff, struct sockaddr_in *cli_addr)
             sendInitLine(csock, 403, version);
             free(htaccPath);
             return -1;
+        }else{
+            free(htaccPath);
         }
-        free(htaccPath);
 
         if (sendFile(csock, fname, version) == -1) {
             sendInitLine(csock, 404, version);
