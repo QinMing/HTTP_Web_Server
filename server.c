@@ -209,14 +209,14 @@ int responseRequest(int csock, RecvBuff* recvBuff, struct sockaddr_in *cli_addr)
 
     if ((newRecvSize=recv(csock, recvBuff->tail, recvBuff->restSize, 0)) < 0)
         error("Receive error");
-    if (newRecvSize == 0) 
+    if (newRecvSize == 0)
         return 0;
     printf("recv buff %d\n%s\n", newRecvSize, recvBuff->tail);
     recvBuff->unconfirmSize += newRecvSize;
     recvBuff->restSize -= newRecvSize;
     recvBuff->tail += newRecvSize;
     while (recvBuff->unconfirmSize > 0) {
-        if (!buffInspect(recvBuff)) 
+        if (!buffInspect(recvBuff))
             return 1;
         printf("client socket: %d\n", csock);
         if (getCommand(recvBuff->buff, &method, fname, &version) == -1) {
@@ -229,26 +229,27 @@ int responseRequest(int csock, RecvBuff* recvBuff, struct sockaddr_in *cli_addr)
                 sendInitLine(csock, 400, version);
                 return -1;
             }
-
-        //TODO get directory of htaccess after it has been checked to be correctly
+            
+            //TODO get directory of htaccess after it has been checked to be correctly
             char* htaccPath = getHtaccessPath(fname);
             if (checkAuth(*cli_addr, htaccPath) == 0) {
                 sendInitLine(csock, 403, version);
                 free(htaccPath);
                 return -1;
+            }else{
+                free(htaccPath);
             }
-            free(htaccPath);
-            return -1;
-        }else{
-            free(htaccPath);
-        }
-
-
+            
             if (sendFile(csock, fname, version) == -1) {
                 sendInitLine(csock, 404, version);
                 return -1;
             }
         }
+        
+        if(isVerLower(version)){
+            return -1;
+        }
+        
         buffChop(recvBuff);
     }
     return 0;
@@ -299,9 +300,9 @@ void* threadMain(void* args) {
             error("Select() error");
         }
     } while (ret != 0);
-    //printf("closed socket %d\n", csock);
-    if (ret == 0 || timeout == WAITLONG)
-        printf("connection timeout\n");
+    printf("Thread exits, csock=%d\n", csock);
+    //if (ret == 0 || timeout == WAITLONG)
+    //    printf("connection timeout\n");
     close(csock);
     deleteRecvBuff(recvBuff);
     return NULL;
