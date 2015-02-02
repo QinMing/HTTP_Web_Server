@@ -10,7 +10,7 @@ RecvBuff* newRecvBuff() {
     b->restSize = RCVBUFSIZE;
     b->unconfirmSize = 0;
     b->tail = b->buff;
-    b->nextHead = NULL;
+    b->nextHead = b->buff;
     b->ptrEnd = carriage;
     b->startMatch = 0;
     return b;
@@ -22,19 +22,14 @@ void deleteRecvBuff(RecvBuff * b) {
 
 //This function will check all unconfirmed data in the
 //buffer, and change the pointers and sizes.
-//only b->unconfirmSize is set outside of here
 //Note: "\n\n" is not supported. A request must contain "\r\n\r\n".
 //
 //return 1: yes. "\r\n\r\n" is found
 //return 0: no
 int buffInspect(RecvBuff * b) {
-    char *newtail = b->tail + b->unconfirmSize;
-    printf("unconfirmSize %d\n", b->unconfirmSize);
-        
-    char *it = b->tail;
-    b->nextHead = NULL;
-    for (; it != newtail; ++it) {
-        if (*it == *b->ptrEnd) {
+    char *it = b->tail - b->unconfirmSize;
+    for (; it != b->tail; ++it) {
+        if (*it == *(b->ptrEnd)) {
             b->ptrEnd++;
             if (b->startMatch == 0)
                 b->startMatch = 1;
@@ -45,14 +40,18 @@ int buffInspect(RecvBuff * b) {
                 b->startMatch = 0;
             }
         }
+        if (*b->ptrEnd == '\0') {
+            it++;
+            break;
+        }
     }
-    b->restSize -= b->unconfirmSize;
-    b->unconfirmSize = 0;
-    b->tail = newtail;
+    b->unconfirmSize = b->tail - it;
+    //b->restSize -= b->unconfirmSize;
     if (*b->ptrEnd == '\0') {
-        b->nextHead = b->tail;
-        return 1;   
-    }
+       b->nextHead = it;
+       b->ptrEnd = carriage;
+       return 1;   
+    }       
     else
         return 0;
 }
@@ -64,13 +63,16 @@ int buffInspect(RecvBuff * b) {
 int buffChop(RecvBuff * b) {
     char *src = b->nextHead;
     char *dst = b->buff;
-    for (; src != b->tail; ++dst, ++src) {
+    int i;
+    for (i = 0; i < b->unconfirmSize; i++) {
         *dst = *src;
-    }
-    b->restSize += b->nextHead - b->buff;
+        dst++;
+        src++;
+    } 
+    *dst = '\0';
+    b->restSize += (b->nextHead - b->buff);
     b->tail = dst;
-    b->nextHead = NULL;
-
+    b->nextHead = b->buff;
     return (b->tail != b->buff);
 }
 
