@@ -200,45 +200,49 @@ int responseRequest(int csock, RecvBuff* recvBuff, struct sockaddr_in *cli_addr)
     char fname[MAXFNAMELEN];
     HttpVersion version;
     Method method;
+    //int ret;
 
     if (( recvBuff->unconfirmSize =
         recv(csock, recvBuff->tail, recvBuff->restSize, 0) ) < 0)
         error("Receive error");
     if (recvBuff->unconfirmSize == 0) 
         return 0;
-    printf("before inspect %s\n", recvBuff->buff);
-    if (!buffInspect(recvBuff)) 
-       return 1;
-        //printf("after inspect %s\n", recvBuff->buff);
-    printf("client socket: %d\n", csock);
-    //rcvBuff[rcvMsgSize] = '\0'; !!careful!
-    if (getCommand(recvBuff->buff, &method, fname, &version) == -1) {
-        sendInitLine(csock, 400, version);
-        return -1;
-    }    
-    //printf("receive command %s\n", recvBuff->buff);
-    if (method == GET) {
-        printf("[Receive request]path=%s\n", fname);
-        if (removeDotSegments(fname) == -1) {
+    while (recvBuff->unconfirmSize > 0) {
+        if (!buffInspect(recvBuff)) 
+            return 1;
+        printf("client socket: %d\n", csock);
+        //rcvBuff[rcvMsgSize] = '\0'; !!careful!
+        if (getCommand(recvBuff->nextHead, &method, fname, &version) == -1) {
             sendInitLine(csock, 400, version);
             return -1;
         }
+        recvBuff->nextHead = recvBuff->tail;    
+        //printf("receive command %s\n", recvBuff->buff);
+        if (method == GET) {
+            printf("[Receive request]path=%s\n", fname);
+            if (removeDotSegments(fname) == -1) {
+                sendInitLine(csock, 400, version);
+                return -1;
+            }
 
         //TODO get directory of htaccess after it has been checked to be correctly
-        char* htaccPath = getHtaccessPath(fname);
-        if (checkAuth(*cli_addr, htaccPath) == 0) {
-            sendInitLine(csock, 403, version);
+            char* htaccPath = getHtaccessPath(fname);
+            if (checkAuth(*cli_addr, htaccPath) == 0) {
+                sendInitLine(csock, 403, version);
+                free(htaccPath);
+                return -1;
+            }
             free(htaccPath);
-            return -1;
-        }
-        free(htaccPath);
 
-        if (sendFile(csock, fname, version) == -1) {
-            sendInitLine(csock, 404, version);
-            return -1;
+            if (sendFile(csock, fname, version) == -1) {
+                sendInitLine(csock, 404, version);
+                return -1;
+            }
         }
+    //ret = buffChop(recvBuff);
     }
-    return buffChop(recvBuff);
+    //return ret;
+    return 0;
     //buffChop return 1: still has data
 }
 

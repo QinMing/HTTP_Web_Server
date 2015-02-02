@@ -10,7 +10,7 @@ RecvBuff* newRecvBuff() {
     b->restSize = RCVBUFSIZE;
     b->unconfirmSize = 0;
     b->tail = b->buff;
-    b->nextHead = NULL;
+    b->nextHead = b->buff;
     b->ptrEnd = carriage;
     b->startMatch = 0;
     return b;
@@ -30,9 +30,11 @@ void deleteRecvBuff(RecvBuff * b) {
 int buffInspect(RecvBuff * b) {
     char *newtail = b->tail + b->unconfirmSize;
     printf("unconfirmSize %d\n", b->unconfirmSize);
+    printf("received buffer\n%s\n", b->buff);
+    //printf("tail buffer\n%s\n", b->tail);
         
     char *it = b->tail;
-    b->nextHead = NULL;
+    //b->nextHead = NULL;
     for (; it != newtail; ++it) {
         if (*it == *(b->ptrEnd)) {
             b->ptrEnd++;
@@ -45,14 +47,19 @@ int buffInspect(RecvBuff * b) {
                 b->startMatch = 0;
             }
         }
+        if (*b->ptrEnd == '\0') {
+            it++;
+            break;
+        }
     }
+    b->unconfirmSize = newtail - it;
     b->restSize -= b->unconfirmSize;
-    b->unconfirmSize = 0;
-    b->tail = newtail;
+    b->tail = it;
     if (*b->ptrEnd == '\0') {
-        b->nextHead = b->tail;
-        return 1;   
-    }
+       //b->nextHead = b->tail;
+       b->ptrEnd = carriage;
+       return 1;   
+    }       
     else
         return 0;
 }
@@ -64,9 +71,16 @@ int buffInspect(RecvBuff * b) {
 int buffChop(RecvBuff * b) {
     char *src = b->nextHead;
     char *dst = b->buff;
-    for (; src != b->tail; ++dst, ++src) {
+    int i;
+    for (i = 0; i < b->unconfirmSize; i++) {
         *dst = *src;
-    }
+        dst++;
+        src++;
+    } 
+    /*for (; src != b->tail; ++dst, ++src) {
+        *dst = *src;
+    }*/
+    *dst = '\0';
     b->restSize += b->nextHead - b->buff;
     b->tail = dst;
     b->nextHead = NULL;
