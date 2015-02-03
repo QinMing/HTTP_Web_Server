@@ -47,15 +47,21 @@ int sendInitLine(int csock, int code, HttpVersion ver) {
     const char str200[] = "200 OK\r\n";
 
     const char str400[] = "400 Bad Request\r\n"
-        "Connection: close\r\n\r\n";
-        //"content-Length: xxxxx" and change the above line.
-        //"Content-Type: text/plain\r\n\r\nError 400 (Bad Request).\r\n\r\n";
+        "Connection: close\r\n"
+        "Content-Length: 26\r\n"
+        "Content-Type: text/plain\r\n\r\nError 400 (Bad Request).\r\n";
 
     const char str404[] = "404 Not Found\r\n"
-        "Connection: close\r\n\r\n";
+        "Connection: close\r\n"
+        "Content-Length: 26\r\n"
+        "Content-Type: text/plain\r\n\r\nError 404 (Not Found  ).\r\n";
+
     
     const char str403[] = "403 Permission Denied\r\n"
-        "Connection: close\r\n\r\n";
+        "Connection: close\r\n"
+        "Content-Length: 26\r\n"
+        "Content-Type: text/plain\r\n\r\nError 403 (Denied     ).\r\n";
+
     
 
     //increase if necessary
