@@ -210,7 +210,7 @@ int responseRequest(int csock, RecvBuff* recvBuff, struct sockaddr_in *cli_addr)
     if ((newRecvSize=recv(csock, recvBuff->tail, recvBuff->restSize, 0)) < 0)
         error("Receive error");
     if (newRecvSize == 0)
-        return 0;
+        return -1;//recv() return 0 means connection closed
     //printf("recv buff %d\n%s\n", newRecvSize, recvBuff->tail);
     recvBuff->unconfirmSize += newRecvSize;
     recvBuff->restSize -= newRecvSize;

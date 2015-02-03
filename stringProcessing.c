@@ -171,8 +171,6 @@ int getCommand(char* commLine, Method* method, char* fname, HttpVersion *version
     if (isVerLower(*version)) {
         return 0;
     } else {
-        ++ptr;
-        if (*ptr == '\n') ++ptr;
         while (strncmp(ptr, "\r\n\r\n", 4) != 0) {
             if (strncmp(ptr, "Host", 4) == 0)return 0;
             if (strncmp(ptr, "host", 4) == 0)return 0;
