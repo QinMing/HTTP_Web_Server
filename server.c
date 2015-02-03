@@ -211,7 +211,7 @@ int responseRequest(int csock, RecvBuff* recvBuff, struct sockaddr_in *cli_addr)
         error("Receive error");
     if (newRecvSize == 0)
         return 0;
-    printf("recv buff %d\n%s\n", newRecvSize, recvBuff->tail);
+    //printf("recv buff %d\n%s\n", newRecvSize, recvBuff->tail);
     recvBuff->unconfirmSize += newRecvSize;
     recvBuff->restSize -= newRecvSize;
     recvBuff->tail += newRecvSize;
