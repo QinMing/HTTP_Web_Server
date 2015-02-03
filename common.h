@@ -10,7 +10,7 @@
 #define MAXVERSIONLEN 32
 #define MAXDOMAINLEN 256
 
-#define WAITLONG 30
+#define WAITLONG 10
 #define WAITSHORT 5
 
 typedef struct {
@@ -32,7 +32,7 @@ typedef struct {
     char *tail;
     char *nextHead;
     char *ptrEnd;
-    int startMatch;
+    int  startMatch;
     char buff[RCVBUFSIZE+1];
 }RecvBuff;
 

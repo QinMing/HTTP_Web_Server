@@ -156,7 +156,6 @@ int sendFile(int csock, char fname[], HttpVersion ver) {
         strcat(fname,"/");//as Professor Porter said.
         type = getFileType(fname);
         if (stat(fname,&fstat) == -1){
-            //should not error //error("get file status error!");
             sendInitLine(csock, 404, ver);
             return -1;
         }
