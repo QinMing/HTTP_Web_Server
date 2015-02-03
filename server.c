@@ -7,6 +7,7 @@
 #include <pthread.h>
 #include <arpa/inet.h>
 #include <errno.h>
+#include <sys/stat.h>
 #include "common.h"
 #include "permission.h"
 #include "stringProcessing.h"
@@ -239,6 +240,16 @@ int responseRequest(int csock, RecvBuff* recvBuff, struct sockaddr_in *cli_addr)
             }else{
                 free(htaccPath);
             }
+            
+            struct stat fstat;
+            if (stat(fname,&fstat) == -1)
+                error("get file status error!");
+            //printf("file %s stat st_mode %d\n", fname, fstat.st_mode);
+            if (!(fstat.st_mode & S_IROTH) || (fstat.st_mode & S_IFDIR)) {
+                //printf("file cannot be accessed by others \n");
+                sendInitLine(csock, 403, version);
+                return -1;
+            } 
             
             if (sendFile(csock, fname, version) == -1) {
                 sendInitLine(csock, 404, version);
