@@ -156,6 +156,9 @@ int sendFile(int csock, char fname[], HttpVersion ver) {
     }
     //printf("debug, fd = %lld\n", (long long int)fd);
     if (fd == NULL) return -1;//send 404 later
+    
+    //TODO: is folder!!!!!!!!!!!!!!!!!!!!!!!!!
+    //if (ISFOLD)
 
     sendInitLine(csock, 200, ver);
 
