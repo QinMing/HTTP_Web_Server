@@ -47,19 +47,20 @@ int sendInitLine(int csock, int code, HttpVersion ver) {
     const char str200[] = "200 OK\r\n";
 
     const char str400[] = "400 Bad Request\r\n"
-        "Connection: close\r\n"
-        "Content-Type: text/plain\r\n\r\nError 400 (Bad Request).\r\n\r\n";
+        "Connection: close\r\n\r\n";
+        //"content-Length: xxxxx" and change the above line.
+        //"Content-Type: text/plain\r\n\r\nError 400 (Bad Request).\r\n\r\n";
 
     const char str404[] = "404 Not Found\r\n"
-        "Connection: close\r\n"
-        "Content-Type: text/plain\r\n\r\nError 404 (Not Found).\r\n\r\n";
-
+        "Connection: close\r\n\r\n";
+    
     const char str403[] = "403 Permission Denied\r\n"
-        "Connection: close\r\n"
-        "Content-Type: text/plain\r\n\r\nError 403 (Permission Denied).\r\n\r\n";
+        "Connection: close\r\n\r\n";
+    
 
     //increase if necessary
     char s[1024];
+    s[0]='\0';//bug fixed at 2015-02-02,21:29:55
 
     if (isVerLower(ver)) {
         strcat(s, strVer10);
@@ -143,7 +144,31 @@ int sendFile(int csock, char fname[], HttpVersion ver) {
     //this will append the default page to fname if needed
     type = getFileType(fname);
 
-    //printf("[debug] file name: %s[end of debug]",fname);
+    struct stat fstat;
+    if (stat(fname,&fstat) == -1){
+        //should not error //error("get file status error!");
+        sendInitLine(csock, 404, ver);
+        return -1;
+    }
+    
+    if (fstat.st_mode & S_IFDIR) {
+        printf("client trys to get a folder. fname=%s \n",fname);
+        strcat(fname,"/");//as Professor Porter said.
+        type = getFileType(fname);
+        if (stat(fname,&fstat) == -1){
+            //should not error //error("get file status error!");
+            sendInitLine(csock, 404, ver);
+            return -1;
+        }
+    }
+    
+    //printf("file %s stat st_mode %d\n", fname, fstat.st_mode);
+    if (!(fstat.st_mode & S_IROTH)) {
+        sendInitLine(csock, 403, ver);
+        printf("file is not worldly readable \n");
+        return -1;
+    }
+
 
     switch (type) {
     case html:
@@ -155,10 +180,10 @@ int sendFile(int csock, char fname[], HttpVersion ver) {
         break;
     }
     //printf("debug, fd = %lld\n", (long long int)fd);
-    if (fd == NULL) return -1;//send 404 later
-    
-    //TODO: is folder!!!!!!!!!!!!!!!!!!!!!!!!!
-    //if (ISFOLD)
+    if (fd == NULL) {
+        sendInitLine(csock, 404, ver);
+        return -1;
+    }
 
     sendInitLine(csock, 200, ver);
 
@@ -188,13 +213,12 @@ int sendFile(int csock, char fname[], HttpVersion ver) {
             error("Send error");
         fsize -= chunkSize;
     }
+    printf("file sent\n");
 
     free(content);
     fclose(fd);
     return 0;
 }
-
-//TODO Chunked transfer
 
 //Only deal with GET. Assume client will not send body, but only initial line and headers.
 //return -1 if csock need to be close. Maybe client error or HTTP/1.0
@@ -208,14 +232,15 @@ int responseRequest(int csock, RecvBuff* recvBuff, struct sockaddr_in *cli_addr)
 
     if (recvBuff->restSize <= 0) {
         sendInitLine(csock, 400, version);
-        return -1;
+        return -1;//done: tested.
     }
 
     if ((newRecvSize=recv(csock, recvBuff->tail, recvBuff->restSize, 0)) < 0)
         error("Receive error");
     if (newRecvSize == 0)
         return -1;//recv() return 0 means connection closed
-    //printf("recv buff %d\n%s\n", newRecvSize, recvBuff->tail);
+    
+    printf("recv()= %d\n", newRecvSize);
     recvBuff->unconfirmSize += newRecvSize;
     recvBuff->restSize -= newRecvSize;
     recvBuff->tail += newRecvSize;
@@ -233,8 +258,7 @@ int responseRequest(int csock, RecvBuff* recvBuff, struct sockaddr_in *cli_addr)
                 sendInitLine(csock, 400, version);
                 return -1;
             }
-            
-            //TODO get directory of htaccess after it has been checked to be correctly
+
             char* htaccPath = getHtaccessPath(fname);
             if (checkAuth(*cli_addr, htaccPath) == 0) {
                 sendInitLine(csock, 403, version);
@@ -244,18 +268,9 @@ int responseRequest(int csock, RecvBuff* recvBuff, struct sockaddr_in *cli_addr)
                 free(htaccPath);
             }
             
-            struct stat fstat;
-            if (stat(fname,&fstat) == -1)
-                error("get file status error!");
-            //printf("file %s stat st_mode %d\n", fname, fstat.st_mode);
-            if (!(fstat.st_mode & S_IROTH) || (fstat.st_mode & S_IFDIR)) {
-                //printf("file cannot be accessed by others \n");
-                sendInitLine(csock, 403, version);
-                return -1;
-            } 
+            
             
             if (sendFile(csock, fname, version) == -1) {
-                sendInitLine(csock, 404, version);
                 return -1;
             }
         }
@@ -282,7 +297,7 @@ void* threadMain(void* args) {
     struct sockaddr_in cli_addr = ( ( struct RespArg* )args )->cli_addr;
     free(( struct RespArg* )args);
 
-    RecvBuff *recvBuff = newRecvBuff();//remember deleteRecvBuff()
+    RecvBuff *recvBuff = newRecvBuff();//remember to deleteRecvBuff()
     int ret = 1;
     int timeout = WAITLONG;
     fd_set rdfds;
